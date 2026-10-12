@@ -78,6 +78,11 @@ func writeFile(t *testing.T, path, content string, mode os.FileMode) {
 	if err := os.WriteFile(path, []byte(content), mode); err != nil {
 		t.Fatal(err)
 	}
+
+	// Past the umask: the mode is what the test compares against.
+	if err := os.Chmod(path, mode); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func readFile(t *testing.T, path string) string {
@@ -697,11 +702,16 @@ func TestEntryTypes(t *testing.T) {
 		t.Errorf("-p: sticky directory %v %v", sticky, err)
 	}
 
-	// The platform may drop the setuid bit for a plain user; the entry lands
-	// with its permissions either way.
+	// The platform may refuse the setuid bit to a plain user: the entry lands
+	// either way, and when the chmod was refused its mode is the umask's, as
+	// under GNU tar, since the refused call is the one that would set it.
 	suid, err := os.Stat(filepath.Join(dst, "suid"))
-	if err != nil || suid.Mode().Perm() != 0o755 {
-		t.Errorf("-p: setuid file %v %v", suid, err)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !strings.Contains(stderr, "tar: suid: Cannot change mode") && suid.Mode().Perm() != 0o755 {
+		t.Errorf("-p: setuid file mode %v", suid.Mode())
 	}
 
 	// Without -p the special bits are not restored, and the entries land.

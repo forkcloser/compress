@@ -50,6 +50,11 @@ func writeFile(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+
+	// Past the umask: the mode is what the test compares against.
+	if err := os.Chmod(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // tree is the fixture: d/a.txt and d/sub/b.txt under a fresh directory the
@@ -62,6 +67,12 @@ func tree(t *testing.T) (dir string, when time.Time) {
 
 	writeFile(t, filepath.Join(dir, "d", "a.txt"), strings.Repeat("the quick brown fox ", 20))
 	writeFile(t, filepath.Join(dir, "d", "sub", "b.txt"), "x\n")
+
+	for _, sub := range []string{"d", filepath.Join("d", "sub")} {
+		if err := os.Chmod(filepath.Join(dir, sub), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	when = time.Date(2024, time.May, 6, 7, 8, 10, 0, time.UTC)
 	if err := os.Chtimes(filepath.Join(dir, "d", "a.txt"), when, when); err != nil {

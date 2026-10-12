@@ -507,8 +507,10 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 		return
 	}
 
-	// The counterpart takes the original's times; a failure there is not
-	// worth losing the result over.
+	// The counterpart takes the original's mode exactly, as the tools do (the
+	// create above went through the umask), and its times; a failure on
+	// either is not worth losing the result over.
+	_ = os.Chmod(target, info.Mode().Perm())
 	_ = os.Chtimes(target, info.ModTime(), info.ModTime())
 
 	if r.opts.Keep {

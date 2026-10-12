@@ -48,6 +48,11 @@ func writeFile(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0o640); err != nil {
 		t.Fatal(err)
 	}
+
+	// Past the umask: the mode is what the test compares against.
+	if err := os.Chmod(path, 0o640); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func readFile(t *testing.T, path string) string {

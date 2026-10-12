@@ -222,6 +222,12 @@ func (e *extractor) file(name string, file *zip.File, mode os.FileMode) {
 		return
 	}
 
+	// The stored mode exactly, as Info-ZIP restores it: the create above went
+	// through the umask.
+	if err := e.root.Chmod(name, perm); err != nil {
+		e.warnf("%s:  cannot set mode: %v", e.display(name), reason(err))
+	}
+
 	// Info-ZIP restores the time it stored; a refusal is not worth the entry.
 	_ = e.root.Chtimes(name, modTime(file), modTime(file))
 
