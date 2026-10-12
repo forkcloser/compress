@@ -67,6 +67,7 @@ func Format() *filecodec.Format {
 		MinLevel:     0,
 		MaxLevel:     9,
 		DefaultLevel: 6,
+		Warning:      filecodec.ExitWarning,
 		Compress: func(w io.Writer, level int, _ filecodec.Header) (io.WriteCloser, error) {
 			writer, err := uxz.WriterConfig{DictCap: dictCaps()[level]}.NewWriter(w)
 			if err != nil {

@@ -41,6 +41,7 @@ func Format() *filecodec.Format {
 		MinLevel:     1,
 		MaxLevel:     9,
 		DefaultLevel: 6,
+		Warning:      filecodec.ExitWarning,
 		Compress: func(w io.Writer, level int, header filecodec.Header) (io.WriteCloser, error) {
 			writer, err := kgzip.NewWriterLevel(w, level)
 			if err != nil {

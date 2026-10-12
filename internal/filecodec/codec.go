@@ -30,6 +30,12 @@ type Format struct {
 	// Levels are the compression levels accepted; DefaultLevel is the one
 	// without a -N.
 	MinLevel, MaxLevel, DefaultLevel int
+	// Keep is whether the tool leaves its inputs in place unless told
+	// otherwise: zstd does, gzip and xz remove them unless --keep.
+	Keep bool
+	// Warning is the exit status after a warning alone: ExitWarning for
+	// gzip and xz, ExitError for zstd, which has no status between the two.
+	Warning int
 	// Compress wraps w in the format's encoder at level; the header fields
 	// name the original file where the format records it (gzip), empty for
 	// standard input or --no-name.
@@ -121,7 +127,7 @@ func (f *Format) Run(name string, args []string, stdin io.Reader, stdout, stderr
 
 // parse reads the shared options, the tool's extras, and the levels.
 func (f *Format) parse(name string, args []string) (*Options, error) {
-	opts := &Options{Level: f.DefaultLevel}
+	opts := &Options{Level: f.DefaultLevel, Keep: f.Keep}
 
 	// unxz, gunzip and uncompress decompress; xzcat and zcat decompress to
 	// standard output.
@@ -165,17 +171,37 @@ func (f *Format) parse(name string, args []string) (*Options, error) {
 }
 
 // cluster applies a run of short options (the letters after one dash): a
-// digit is a level, a tool's own letter is its, the rest are shared. A
-// letter that takes a value takes the rest of the cluster or the next word;
-// the result is how many following words were consumed.
+// run of digits is one level (zstd's -19 is nineteen, not one then nine), a
+// tool's own letter is its, the rest are shared. A letter that takes a
+// value takes the rest of the cluster or the next word; the result is how
+// many following words were consumed.
 func (f *Format) cluster(opts *Options, letters string, following []string) (int, error) {
+	skip := 0
+
 	for i, letter := range letters {
+		if skip > 0 {
+			skip--
+
+			continue
+		}
+
+		if isDigit(letter) {
+			digits := letters[i : i+digitRun(letters[i:])]
+			skip = len(digits) - 1
+
+			if err := f.setLevelText(opts, digits); err != nil {
+				return 0, err
+			}
+
+			continue
+		}
+
 		extra, isExtra := f.Extra[string(letter)]
 		if isExtra && extra.TakesValue {
 			return extraWithValue(opts, letter, extra, letters[i+1:], following)
 		}
 
-		if err := f.letter(opts, letter, extra, isExtra); err != nil {
+		if err := applyLetter(opts, letter, extra, isExtra); err != nil {
 			return 0, err
 		}
 	}
@@ -183,17 +209,41 @@ func (f *Format) cluster(opts *Options, letters string, following []string) (int
 	return 0, nil
 }
 
-// letter applies one short option that takes no value: a digit is a level,
-// a tool's own letter is its, the rest are shared.
-func (f *Format) letter(opts *Options, letter rune, extra Extra, isExtra bool) error {
-	switch {
-	case letter >= '0' && letter <= '9':
-		return f.setLevel(opts, int(letter-'0'))
-	case isExtra:
+// applyLetter applies one short option that takes no value: a tool's own
+// letter is its, the rest are shared.
+func applyLetter(opts *Options, letter rune, extra Extra, isExtra bool) error {
+	if isExtra {
 		return extra.apply(opts, "")
-	default:
-		return shortOption(opts, letter)
 	}
+
+	return shortOption(opts, letter)
+}
+
+func isDigit(r rune) bool {
+	return r >= '0' && r <= '9'
+}
+
+// digitRun is the length of the run of digits s starts with.
+func digitRun(s string) int {
+	n := 0
+	for n < len(s) && isDigit(rune(s[n])) {
+		n++
+	}
+
+	return n
+}
+
+// setLevelText applies a level given as digits; a run too long for an int
+// is refused the same way as one out of range.
+func (f *Format) setLevelText(opts *Options, digits string) error {
+	level, err := strconv.Atoi(digits)
+	if err != nil {
+		return fmt.Errorf(
+			"%w: compression level %s is not between %d and %d", errUsage, digits, f.MinLevel, f.MaxLevel,
+		)
+	}
+
+	return f.setLevel(opts, level)
 }
 
 // extraWithValue applies a tool's own short option that takes a value: the
@@ -334,7 +384,7 @@ type runner struct {
 
 func (r *runner) warnf(format string, args ...any) {
 	if r.status == ExitOK {
-		r.status = ExitWarning
+		r.status = r.format.Warning
 	}
 
 	if !r.opts.Quiet {

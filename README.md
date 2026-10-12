@@ -1,12 +1,12 @@
 # compress
 
 Compression and archiving for the toolchain, in pure Go: a library for
-streaming zstd, gzip, xz, lz4 and bzip2, and the `tar`, `xz` and `gzip`
-commands built on it, released for every platform the rig runs on and pinned
-through aqua like every other tool. Exists because the rig's builds took
-`tar`, `xz` and `gzip` from whatever the host had: GNU tar on Linux, bsdtar
-on macOS, Homebrew's on a runner, none of it pinned. One module, one set of
-behaviors, verified releases.
+streaming zstd, gzip, xz, lz4 and bzip2, and the `tar`, `xz`, `gzip` and
+`zstd` commands built on it, released for every platform the rig runs on and
+pinned through aqua like every other tool. Exists because the rig's builds
+took `tar`, `xz` and `gzip` from whatever the host had: GNU tar on Linux,
+bsdtar on macOS, Homebrew's on a runner, none of it pinned. One module, one
+set of behaviors, verified releases.
 
 ## The library
 
@@ -43,20 +43,23 @@ use, and refuses anything else as a usage error rather than guessing.
   tar; a read without a compression flag picks the decoder by magic. Extraction
   goes through `os.Root`, so no entry, however named or linked, lands outside
   the destination. Exit 0, 2 after any error, 64 for a usage error.
-- **xz** and **gzip**: files compressed beside themselves and removed,
+- **xz**, **gzip** and **zstd**: files compressed beside themselves,
   decompressed back by suffix, standard streams when no file is named;
-  `-c`, `-d`, `-f`, `-k`, `-q`, `-t`, `-1`…`-9`, and gzip's `-n`/`-N`. `unxz`,
-  `xzcat`, `gunzip` and `zcat` are the same binaries invoked by those names.
-  Exit 0, 1 after an error, 2 after a warning alone.
+  `-c`, `-d`, `-f`, `-k`, `-q`, `-t`, the levels (`-1`…`-9`, zstd's up to
+  `-19`), gzip's `-n`/`-N`, zstd's `--rm`. xz and gzip remove their input
+  unless `-k`; zstd keeps it unless `--rm`, as the tools do. `unxz`, `xzcat`,
+  `gunzip`, `zcat`, `unzstd` and `zstdcat` are the same binaries invoked by
+  those names. Exit 0, 1 after an error, 2 after a warning alone (zstd has
+  no warning status: 1).
 
 xz's compression ratio is forkcloser/xz's, below the C tool's at the same
 preset; decoding is at parity.
 
 ## Releasing
 
-Tag `vX.Y.Z`; the release workflow builds the three binaries for
+Tag `vX.Y.Z`; the release workflow builds every binary for
 darwin/arm64, linux/amd64, linux/arm64, windows/amd64 and windows/arm64, one
-`tar.gz` archive per platform carrying all three, with a `checksums.txt`
+`tar.gz` archive per platform carrying them all, with a `checksums.txt`
 signed keyless by the workflow. This is the reference entry for a consumer's
 local aqua registry; `gtar` is the same `tar` under the name curl-for-win
 calls on macOS:
@@ -65,7 +68,7 @@ calls on macOS:
 - type: github_release
   repo_owner: forkcloser
   repo_name: compress
-  description: tar, xz and gzip in pure Go (forkcloser/compress)
+  description: tar, xz, gzip and zstd in pure Go (forkcloser/compress)
   asset: compress_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz
   format: tar.gz
   files:
@@ -74,6 +77,7 @@ calls on macOS:
       src: tar
     - name: xz
     - name: gzip
+    - name: zstd
   checksum:
     type: github_release
     asset: checksums.txt
