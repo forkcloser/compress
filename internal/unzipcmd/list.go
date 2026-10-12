@@ -63,7 +63,8 @@ func discard(file *zip.File) error {
 	return copyContent(io.Discard, file)
 }
 
-// pipe is -p: the files' content to standard output, nothing else.
+// pipe is -p: the files' content to standard output, nothing else; a
+// damaged entry is reported in the words extraction and -t use.
 func pipe(files []*zip.File, stdout, stderr io.Writer) int {
 	status := ExitOK
 
@@ -72,22 +73,11 @@ func pipe(files []*zip.File, stdout, stderr io.Writer) int {
 			continue
 		}
 
-		content, err := file.Open()
-		if err != nil {
-			fmt.Fprintf(stderr, "%s:  cannot open entry: %v\n", file.Name, err)
-
-			status = ExitError
-
-			continue
-		}
-
-		if _, err := io.Copy(stdout, content); err != nil { // #nosec G110 -- piping the entry is the command
+		if err := copyContent(stdout, file); err != nil {
 			fmt.Fprintf(stderr, "%s:  %v\n", file.Name, err)
 
 			status = ExitError
 		}
-
-		_ = content.Close()
 	}
 
 	return status

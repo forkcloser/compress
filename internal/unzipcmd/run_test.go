@@ -325,6 +325,11 @@ func TestTestAndPipe(t *testing.T) {
 	if got := mustRun(t, "-p", archive, "d/sub/b.txt"); got != "x\n" {
 		t.Errorf("-p: %q", got)
 	}
+
+	status, _, stderr = run(t, "-p", bad, "bad")
+	if status != unzipcmd.ExitError || !strings.Contains(stderr, "bad:  bad CRC") {
+		t.Errorf("-p bad CRC: exit %d, stderr %q", status, stderr)
+	}
 }
 
 // TestMembers: patterns select entries, "*" across slashes; -x excludes; a
