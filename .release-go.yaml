@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
-# goreleaser — https://goreleaser.com — the tar, xz, gzip and zstd binaries.
+# goreleaser — https://goreleaser.com — the tar, xz, gzip, zstd, zip and unzip
+# binaries.
 # Local dry-run: `just do release --local --dry-run` (no tag, no publish,
 # artifacts under build/). Real release: `just do release vX.Y.Z`.
 version: 2
@@ -84,6 +85,48 @@ builds:
   - id: zstd
     main: ./cmd/zstd
     binary: zstd
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    buildmode: pie
+    tags:
+      - netgo
+      - osusergo
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    targets:
+      - darwin_arm64
+      - linux_amd64
+      - linux_arm64
+      - windows_amd64
+      - windows_arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: zip
+    main: ./cmd/zip
+    binary: zip
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    buildmode: pie
+    tags:
+      - netgo
+      - osusergo
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    targets:
+      - darwin_arm64
+      - linux_amd64
+      - linux_arm64
+      - windows_amd64
+      - windows_arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: unzip
+    main: ./cmd/unzip
+    binary: unzip
     env:
       - CGO_ENABLED=0
     flags:

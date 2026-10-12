@@ -1,12 +1,12 @@
 # compress
 
 Compression and archiving for the toolchain, in pure Go: a library for
-streaming zstd, gzip, xz, lz4 and bzip2, and the `tar`, `xz`, `gzip` and
-`zstd` commands built on it, released for every platform the rig runs on and
-pinned through aqua like every other tool. Exists because the rig's builds
-took `tar`, `xz` and `gzip` from whatever the host had: GNU tar on Linux,
-bsdtar on macOS, Homebrew's on a runner, none of it pinned. One module, one
-set of behaviors, verified releases.
+streaming zstd, gzip, xz, lz4 and bzip2, and the `tar`, `xz`, `gzip`, `zstd`,
+`zip` and `unzip` commands built on it, released for every platform the rig
+runs on and pinned through aqua like every other tool. Exists because the
+rig's builds took `tar`, `xz`, `gzip` and `unzip` from whatever the host had:
+GNU tar on Linux, bsdtar on macOS, Homebrew's on a runner, none of it pinned.
+One module, one set of behaviors, verified releases.
 
 ## The library
 
@@ -51,6 +51,17 @@ use, and refuses anything else as a usage error rather than guessing.
   `gunzip`, `zcat`, `unzstd` and `zstdcat` are the same binaries invoked by
   those names. Exit 0, 1 after an error, 2 after a warning alone (zstd has
   no warning status: 1).
+- **zip**: `zip [-options] archive [input ...]` with `-r`, `-q`, `-0`…`-9`,
+  `-X`, `-@`, `-o`, `-j`, `-D`; an existing archive is updated, `-` writes
+  to standard output, names come from standard input under `-@`, and `-X`
+  leaves only the DOS time fields, which is how curl-for-win packs. Exit
+  statuses are Info-ZIP's: 12 for nothing to do, 16 for a usage error, 18
+  for an input that could not be read.
+- **unzip**: `unzip [-options] archive[.zip] [member ...] [-x member ...]
+  [-d dir]` with `-q`, `-o`, `-n`, `-l`, `-t`, `-p`, `-j`; patterns take `*`
+  and `?`. Extraction goes through `os.Root` like tar's. Exit statuses are
+  Info-ZIP's: 1 after a warning, 9 for a missing archive, 10 for a usage
+  error, 11 when no member matched.
 
 xz's compression ratio is forkcloser/xz's, below the C tool's at the same
 preset; decoding is at parity.
@@ -68,7 +79,7 @@ calls on macOS:
 - type: github_release
   repo_owner: forkcloser
   repo_name: compress
-  description: tar, xz, gzip and zstd in pure Go (forkcloser/compress)
+  description: tar, xz, gzip, zstd, zip and unzip in pure Go (forkcloser/compress)
   asset: compress_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz
   format: tar.gz
   files:
@@ -78,6 +89,8 @@ calls on macOS:
     - name: xz
     - name: gzip
     - name: zstd
+    - name: zip
+    - name: unzip
   checksum:
     type: github_release
     asset: checksums.txt

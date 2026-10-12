@@ -20,6 +20,11 @@ golangci:
             - noctx # no cancellation to propagate
             - perfsprint # readability over allocations
             - mnd # fixture values
+        # zip resolves its inputs against the working directory, so its tests
+        # change it with t.Chdir, which t.Parallel forbids.
+        - path: internal/zipcmd/run_test\.go
+          linters:
+            - paralleltest
     settings:
       wrapcheck:
         # Errors from this module's own packages carry their context from
