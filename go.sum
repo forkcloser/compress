@@ -1,0 +1,6 @@
+github.com/forkcloser/xz v1.0.2 h1:EczpMCCAy7l94vzitbLhIdOc9QuHYdWMybe2j4bKHTA=
+github.com/forkcloser/xz v1.0.2/go.mod h1:97jHfaW5ugdlASYSsIlWK2tohamE+Jh5ouA78TH92sU=
+github.com/klauspost/compress v1.20.1 h1:T7kKElXUMXrUJ2E9QhQhxFtcK5rPyLdsGZvdbLMPdiQ=
+github.com/klauspost/compress v1.20.1/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
+github.com/pierrec/lz4/v4 v4.1.33 h1:GjG1TJ1V4IzKP8L96muuuDNpTwd7D+l2ccXrjAbe014=
+github.com/pierrec/lz4/v4 v4.1.33/go.mod h1:7SE9MC2STkNtL4PIwGhjmyVwvILaGI9/COYQNBhKM/c=

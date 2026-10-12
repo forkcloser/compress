@@ -1,0 +1,115 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+# goreleaser — https://goreleaser.com — the tar, xz and gzip binaries.
+# Local dry-run: `just do release --local --dry-run` (no tag, no publish,
+# artifacts under build/). Real release: `just do release vX.Y.Z`.
+version: 2
+
+project_name: compress
+
+# Under build/ (covered by the canonical .gitignore), in a subdirectory of its
+# own: goreleaser --clean wipes its dist directory, and the dev builds the
+# other recipes put in build/ must survive a release run.
+dist: build/release
+
+# Twin of the `release` recipe in .limen/just/build-go.just. CGO off,
+# categorically: it is what makes the whole target matrix buildable from one
+# laptop. The three commands share one set of flags; each stamps its own
+# main.version. Exactly the platforms .aqua/aqua.yaml lists under
+# checksum.supported_envs.
+builds:
+  - id: tar
+    main: ./cmd/tar
+    binary: tar
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    buildmode: pie
+    tags:
+      - netgo
+      - osusergo
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    targets:
+      - darwin_arm64
+      - linux_amd64
+      - linux_arm64
+      - windows_amd64
+      - windows_arm64
+    # Reproducible builds: stamp the commit time, not the build time.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: xz
+    main: ./cmd/xz
+    binary: xz
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    buildmode: pie
+    tags:
+      - netgo
+      - osusergo
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    targets:
+      - darwin_arm64
+      - linux_amd64
+      - linux_arm64
+      - windows_amd64
+      - windows_arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+  - id: gzip
+    main: ./cmd/gzip
+    binary: gzip
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    buildmode: pie
+    tags:
+      - netgo
+      - osusergo
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    targets:
+      - darwin_arm64
+      - linux_amd64
+      - linux_arm64
+      - windows_amd64
+      - windows_arm64
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+# One archive per platform carrying the three binaries (no ids: every build).
+archives:
+  - formats: ["tar.gz"]
+
+checksum:
+  # The single checksums file aqua verifies release assets against.
+  name_template: checksums.txt
+
+# cosign (v3, Sigstore bundle format) over the checksums file — signing that
+# one file transitively covers every artifact it lists. Keyless in CI (the
+# release workflow's OIDC identity is the signer); a laptop release signs with
+# COSIGN_KEY. goreleaser only substitutes ${signature}/${artifact} in args;
+# ${COSIGN_KEY:-} survives for the shell to branch on. One line, not a block
+# scalar: yamlfmt corrupts folded scalars.
+signs:
+  - cmd: sh
+    artifacts: checksum
+    signature: "${artifact}.sigstore.json"
+    args:
+      - -c
+      - 'if [ -n "${COSIGN_KEY:-}" ]; then cosign sign-blob --yes --key "${COSIGN_KEY}" --use-signing-config=false --bundle "${signature}" "${artifact}"; else cosign sign-blob --yes --bundle "${signature}" "${artifact}"; fi'
+
+release:
+  # A prerelease-suffixed tag is published as a GitHub prerelease, never the
+  # repository's latest.
+  prerelease: auto
+  # A laptop release that failed halfway is retried on the same tag: overwrite
+  # what the partial attempt uploaded instead of failing on "already_exists".
+  replace_existing_artifacts: true
+
+changelog:
+  use: github-native
