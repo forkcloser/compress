@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -112,7 +113,8 @@ func TestFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if info.Mode().Perm() != 0o640 || !info.ModTime().Equal(when) {
+	// Windows has no permission bits to carry over.
+	if (runtime.GOOS != "windows" && info.Mode().Perm() != 0o640) || !info.ModTime().Equal(when) {
 		t.Errorf("mode %v, mtime %v", info.Mode(), info.ModTime())
 	}
 
@@ -176,6 +178,12 @@ func TestRefusals(t *testing.T) {
 	plain := filepath.Join(dir, "plain")
 	writeFile(t, plain, payload)
 
+	// The OS's words for a missing file.
+	missing := "no such file"
+	if runtime.GOOS == "windows" {
+		missing = "cannot find the file"
+	}
+
 	for _, tc := range []struct {
 		args   []string
 		status int
@@ -190,7 +198,7 @@ func TestRefusals(t *testing.T) {
 		{[]string{"--check=crc32"}, filecodec.ExitError, "crc32: Unsupported integrity check type"},
 		{[]string{"-d", plain}, filecodec.ExitWarning, "unknown suffix -- ignored"},
 		{[]string{"-d", filepath.Join(dir, "missing.xz")}, filecodec.ExitError, "missing.xz"},
-		{[]string{"-dc", plain + ".xz"}, filecodec.ExitError, "no such file"},
+		{[]string{"-dc", plain + ".xz"}, filecodec.ExitError, missing},
 		{[]string{"-d", dir}, filecodec.ExitWarning, "not a regular file -- ignored"},
 	} {
 		status, _, stderr := run(t, "xz", nil, tc.args...)

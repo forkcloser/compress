@@ -517,6 +517,9 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 		return
 	}
 
+	// Closed before the remove: Windows refuses to remove an open file.
+	_ = source.Close()
+
 	if err := os.Remove(name); err != nil {
 		r.failf("%s: %v", name, reason(err))
 	}

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -134,6 +135,24 @@ func readArchiveFile(t *testing.T, path string) []stored {
 	return readArchive(t, data)
 }
 
+// filePerm and dirPerm are the modes a 0o644 file and a 0o755 directory
+// report: Windows has no permission bits and reports 0666 and 0777.
+func filePerm() os.FileMode {
+	if runtime.GOOS == "windows" {
+		return 0o666
+	}
+
+	return 0o644
+}
+
+func dirPerm() os.FileMode {
+	if runtime.GOOS == "windows" {
+		return 0o777
+	}
+
+	return 0o755
+}
+
 func names(entries []stored) []string {
 	out := make([]string, 0, len(entries))
 	for _, e := range entries {
@@ -150,6 +169,10 @@ func TestCreate(t *testing.T) {
 	_, when := tree(t)
 
 	if err := os.Symlink("a.txt", filepath.Join("d", "link")); err != nil {
+		if runtime.GOOS == "windows" {
+			t.Skip("symbolic links need a privilege this account lacks")
+		}
+
 		t.Fatal(err)
 	}
 
@@ -169,16 +192,16 @@ func TestCreate(t *testing.T) {
 	}
 
 	link := entries[2]
-	if link.mode != 0o644 || !link.mode.IsRegular() || link.data != entries[1].data {
+	if link.mode != filePerm() || !link.mode.IsRegular() || link.data != entries[1].data {
 		t.Errorf("link: %+v", link)
 	}
 
-	if entries[0].method != zip.Store || !entries[0].mode.IsDir() || entries[0].mode.Perm() != 0o755 {
+	if entries[0].method != zip.Store || !entries[0].mode.IsDir() || entries[0].mode.Perm() != dirPerm() {
 		t.Errorf("d/: %+v", entries[0])
 	}
 
 	a := entries[1]
-	if a.method != zip.Deflate || a.mode != 0o644 || a.extra == 0 || !a.when.Equal(when) ||
+	if a.method != zip.Deflate || a.mode != filePerm() || a.extra == 0 || !a.when.Equal(when) ||
 		!strings.HasPrefix(a.data, "the quick") {
 		t.Errorf("a.txt: %+v", a)
 	}
@@ -258,7 +281,7 @@ func TestStripExtra(t *testing.T) {
 	}
 
 	a := entries[0]
-	if a.method != zip.Store || a.extra != 0 || a.mode != 0o644 {
+	if a.method != zip.Store || a.extra != 0 || a.mode != filePerm() {
 		t.Errorf("a.txt: %+v", a)
 	}
 
@@ -346,8 +369,8 @@ func TestRefusals(t *testing.T) {
 		}
 	}
 
-	if os.Getuid() == 0 {
-		return // root reads anything
+	if os.Getuid() == 0 || runtime.GOOS == "windows" {
+		return // root reads anything, and Windows has no mode to lock a file with
 	}
 
 	if err := os.Chmod(filepath.Join("d", "sub", "b.txt"), 0); err != nil {

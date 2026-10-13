@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -113,7 +114,8 @@ func TestFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if info.Mode().Perm() != 0o640 || !info.ModTime().Equal(when) {
+	// Windows has no permission bits to carry over.
+	if (runtime.GOOS != "windows" && info.Mode().Perm() != 0o640) || !info.ModTime().Equal(when) {
 		t.Errorf("mode %v, mtime %v", info.Mode(), info.ModTime())
 	}
 

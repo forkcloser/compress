@@ -10,6 +10,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -199,7 +200,8 @@ func TestExtract(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if a.Mode().Perm() != 0o640 || !a.ModTime().Equal(stamp()) {
+	// Windows has no permission bits to restore.
+	if (runtime.GOOS != "windows" && a.Mode().Perm() != 0o640) || !a.ModTime().Equal(stamp()) {
 		t.Errorf("a.txt: %v %v", a.Mode(), a.ModTime())
 	}
 
@@ -217,7 +219,7 @@ func TestExtract(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if d.Mode().Perm() != 0o755 || !d.ModTime().Equal(stamp()) {
+	if (runtime.GOOS != "windows" && d.Mode().Perm() != 0o755) || !d.ModTime().Equal(stamp()) {
 		t.Errorf("d: %v %v", d.Mode(), d.ModTime())
 	}
 
@@ -239,8 +241,9 @@ func TestOverwrite(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The display joins the -d directory and the entry's name with a slash.
 	status, _, stderr := run(t, "-q", archive, "-d", out)
-	if status != unzipcmd.ExitWarning || !strings.Contains(stderr, "replace "+a+"?") {
+	if status != unzipcmd.ExitWarning || !strings.Contains(stderr, "replace "+out+"/d/a.txt?") {
 		t.Errorf("exit %d, stderr %q", status, stderr)
 	}
 
