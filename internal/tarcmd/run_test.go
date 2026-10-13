@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"slices"
 	"strings"
 	"testing"
@@ -135,7 +136,8 @@ func assertTree(t *testing.T, dst string) {
 		t.Fatal(err)
 	}
 
-	if info.Mode()&0o100 == 0 {
+	// Windows has no execute bit to keep.
+	if runtime.GOOS != "windows" && info.Mode()&0o100 == 0 {
 		t.Errorf("run.sh lost its execute bit: %v", info.Mode())
 	}
 
@@ -544,7 +546,8 @@ func TestMemberErrors(t *testing.T) {
 
 	// An absolute member is found where it says, whatever -C is in force.
 	stdout, stderr := mustRun(t, nil, "-c", "-C", t.TempDir(), filepath.Join(src, "hello.txt"))
-	if !strings.Contains(stderr, "Removing leading") {
+	// A Windows absolute path starts with a drive letter, not a slash.
+	if runtime.GOOS != "windows" && !strings.Contains(stderr, "Removing leading") {
 		t.Errorf("stderr %q", stderr)
 	}
 
@@ -553,8 +556,8 @@ func TestMemberErrors(t *testing.T) {
 		t.Errorf("entries %q, want %q", got, want)
 	}
 
-	if os.Getuid() == 0 {
-		return // root reads anything
+	if os.Getuid() == 0 || runtime.GOOS == "windows" {
+		return // root reads anything, and Windows has no mode to lock a file with
 	}
 
 	// A member that cannot be read is reported and skipped; the archive
@@ -697,8 +700,11 @@ func TestEntryTypes(t *testing.T) {
 		}
 	}
 
+	// Windows has none of these bits: the entries land, their modes are its.
+	posix := runtime.GOOS != "windows"
+
 	sticky, err := os.Stat(filepath.Join(dst, "sticky"))
-	if err != nil || sticky.Mode()&(fs.ModePerm|fs.ModeSticky) != 0o777|fs.ModeSticky {
+	if err != nil || (posix && sticky.Mode()&(fs.ModePerm|fs.ModeSticky) != 0o777|fs.ModeSticky) {
 		t.Errorf("-p: sticky directory %v %v", sticky, err)
 	}
 
@@ -710,7 +716,7 @@ func TestEntryTypes(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if !strings.Contains(stderr, "tar: suid: Cannot change mode") && suid.Mode().Perm() != 0o755 {
+	if posix && !strings.Contains(stderr, "tar: suid: Cannot change mode") && suid.Mode().Perm() != 0o755 {
 		t.Errorf("-p: setuid file mode %v", suid.Mode())
 	}
 
@@ -740,7 +746,7 @@ func TestEntryTypes(t *testing.T) {
 		t.Errorf("hard link: %v %v", hard, err)
 	}
 
-	if orig.Mode().Perm() != 0o640 {
+	if posix && orig.Mode().Perm() != 0o640 {
 		t.Errorf("-p: mode %v", orig.Mode())
 	}
 
@@ -776,6 +782,11 @@ func TestEntryTypes(t *testing.T) {
 // TestInterop: archives exchanged with the tar every host has.
 func TestInterop(t *testing.T) {
 	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("the tar on a Windows runner's PATH is Git for Windows' tar.exe, which fails on these paths " +
+			"(exit 2 and 128): not a tar this package exchanges archives with")
+	}
 
 	system, err := exec.LookPath("tar")
 	if err != nil {
