@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/forkcloser/compress"
+	"github.com/forkcloser/compress/internal/reference"
 	"github.com/forkcloser/compress/internal/tarcmd"
 )
 
@@ -788,10 +789,7 @@ func TestInterop(t *testing.T) {
 			"(exit 2 and 128): not a tar this package exchanges archives with")
 	}
 
-	system, err := exec.LookPath("tar")
-	if err != nil {
-		t.Skip("no tar on PATH")
-	}
+	system := reference.Find(t, "tar", "--version")
 
 	src := tree(t)
 
