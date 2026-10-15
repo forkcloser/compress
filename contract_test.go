@@ -40,6 +40,7 @@ import (
 	"github.com/forkcloser/xz"
 
 	"github.com/forkcloser/compress"
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 // encoder compresses payload in one format, as that format's own writer does.
@@ -136,10 +137,10 @@ func write(tb testing.TB, writer io.WriteCloser, payload []byte) {
 func sizes() []int {
 	return []int{
 		0, 1, 255, 256,
-		4*compress.KiB - 1, 4 * compress.KiB, 4*compress.KiB + 1,
-		64*compress.KiB - 1, 64 * compress.KiB, 64*compress.KiB + 1,
-		256*compress.KiB - 1, 256 * compress.KiB, 256*compress.KiB + 1,
-		4*compress.MiB + 3,
+		4*constants.KiB - 1, 4 * constants.KiB, 4*constants.KiB + 1,
+		64*constants.KiB - 1, 64 * constants.KiB, 64*constants.KiB + 1,
+		256*constants.KiB - 1, 256 * constants.KiB, 256*constants.KiB + 1,
+		4*constants.MiB + 3,
 	}
 }
 
@@ -232,7 +233,7 @@ func TestTruncatedStreams(t *testing.T) {
 			t.Run(name+"/"+cut, func(t *testing.T) {
 				t.Parallel()
 
-				whole := encode(t, payload(256*compress.KiB+1))
+				whole := encode(t, payload(256*constants.KiB+1))
 
 				end := len(whole) / 2
 				if cut == "trailer" {

@@ -21,7 +21,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress"
+	"github.com/forkcloser/compress/internal/constants"
 	"github.com/forkcloser/compress/internal/reference"
 	"github.com/forkcloser/compress/internal/tarcmd"
 )
@@ -831,7 +831,7 @@ func TestLargeFile(t *testing.T) {
 	t.Parallel()
 
 	src := t.TempDir()
-	want := strings.Repeat("0123456789abcdef", 3*compress.MiB/16+5)
+	want := strings.Repeat("0123456789abcdef", 3*constants.MiB/16+5)
 	writeFile(t, filepath.Join(src, "big"), want, 0o644)
 
 	archive := filepath.Join(t.TempDir(), "big.tar.xz")

@@ -9,7 +9,7 @@ import (
 
 	uxz "github.com/forkcloser/xz"
 
-	"github.com/forkcloser/compress"
+	"github.com/forkcloser/compress/internal/constants"
 	"github.com/forkcloser/compress/internal/filecodec"
 )
 
@@ -34,8 +34,8 @@ With no FILE, or when FILE is -, read standard input.
 // dictCaps are xz's presets as dictionary sizes: 0 through 9.
 func dictCaps() []int {
 	return []int{
-		256 * compress.KiB, compress.MiB, 2 * compress.MiB, 4 * compress.MiB, 4 * compress.MiB,
-		8 * compress.MiB, 8 * compress.MiB, 16 * compress.MiB, 32 * compress.MiB, 64 * compress.MiB,
+		256 * constants.KiB, constants.MiB, 2 * constants.MiB, 4 * constants.MiB, 4 * constants.MiB,
+		8 * constants.MiB, 8 * constants.MiB, 16 * constants.MiB, 32 * constants.MiB, 64 * constants.MiB,
 	}
 }
 

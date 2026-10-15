@@ -11,13 +11,11 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 const (
-	parentPermissions os.FileMode = 0o755
-	// ownerAccess is what a directory being filled needs whatever the
-	// archive says of it; the archive's mode is applied afterwards.
-	ownerAccess os.FileMode = 0o700
 	// specialBits are what -p restores beyond the permissions; os.Root
 	// refuses them at creation, so they are applied afterwards.
 	specialBits = fs.ModeSetuid | fs.ModeSetgid | fs.ModeSticky
@@ -165,7 +163,7 @@ func (e *extractor) memberName(archiveName string) (string, bool) {
 }
 
 func (e *extractor) dir(name string, header *tar.Header) error {
-	if err := e.root.MkdirAll(name, perm(header)|ownerAccess); err != nil {
+	if err := e.root.MkdirAll(name, perm(header)|constants.OwnerAccess); err != nil {
 		return fmt.Errorf("Cannot mkdir: %w", errReason(err))
 	}
 
@@ -247,7 +245,7 @@ func (e *extractor) hardlink(name string, header *tar.Header) error {
 // error, as it is for tar).
 func (e *extractor) prepare(name string) error {
 	if parent := path.Dir(name); parent != "." {
-		if err := e.root.MkdirAll(parent, parentPermissions); err != nil {
+		if err := e.root.MkdirAll(parent, constants.DirPermissions); err != nil {
 			return fmt.Errorf("Cannot mkdir: %w", errReason(err))
 		}
 	}

@@ -23,6 +23,7 @@ import (
 	"testing"
 
 	"github.com/forkcloser/compress"
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 // The guards: the package exists to stream blob-scale content through these
@@ -30,7 +31,7 @@ import (
 // shows here.
 
 func BenchmarkDecompress(b *testing.B) {
-	want := payload(8 * compress.MiB)
+	want := payload(8 * constants.MiB)
 
 	for name, encode := range encoders() {
 		if name == "compress" {
@@ -59,7 +60,7 @@ func BenchmarkDecompress(b *testing.B) {
 }
 
 func BenchmarkCompress(b *testing.B) {
-	want := payload(8 * compress.MiB)
+	want := payload(8 * constants.MiB)
 
 	b.SetBytes(int64(len(want)))
 

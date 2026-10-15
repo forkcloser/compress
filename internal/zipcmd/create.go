@@ -13,12 +13,11 @@ import (
 	"time"
 
 	"github.com/klauspost/compress/flate"
+
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 const (
-	// archivePermissions is what Info-ZIP creates an archive with, before
-	// the umask.
-	archivePermissions os.FileMode = 0o644
 	// dosEpoch is the first year the DOS date field can hold.
 	dosEpoch = 1980
 	percent  = 100
@@ -266,7 +265,7 @@ func (c *creator) writeFile(target string, existing *zip.ReadCloser, entries []e
 		return c.errorf(ExitCreate, "Output file write failure (%v)", err)
 	}
 
-	if err := os.Chmod(tmp.Name(), archivePermissions); err != nil {
+	if err := os.Chmod(tmp.Name(), constants.FilePermissions); err != nil {
 		return c.errorf(ExitCreate, "Could not create output file (%v)", err)
 	}
 

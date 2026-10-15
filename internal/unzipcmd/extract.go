@@ -12,14 +12,11 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 const (
-	parentPermissions os.FileMode = 0o755
-	filePermissions   os.FileMode = 0o644
-	// ownerAccess is what a directory being filled needs whatever the
-	// archive says of it; the archive's mode is applied afterwards.
-	ownerAccess os.FileMode = 0o700
 	// linkTargetCap bounds a symbolic link's target read from the archive.
 	linkTargetCap = 64 * 1024
 
@@ -136,10 +133,10 @@ func (e *extractor) display(name string) string {
 func (e *extractor) directory(name string, file *zip.File, mode os.FileMode) {
 	perm := mode.Perm()
 	if perm == 0 {
-		perm = parentPermissions
+		perm = constants.DirPermissions
 	}
 
-	if err := e.root.MkdirAll(name, perm|ownerAccess); err != nil {
+	if err := e.root.MkdirAll(name, perm|constants.OwnerAccess); err != nil {
 		e.errorf("checkdir error:  cannot create %s: %v", e.display(name), reason(err))
 
 		return
@@ -160,7 +157,7 @@ func (e *extractor) parents(name string) bool {
 		return true
 	}
 
-	if err := e.root.MkdirAll(parent, parentPermissions); err != nil {
+	if err := e.root.MkdirAll(parent, constants.DirPermissions); err != nil {
 		e.errorf("checkdir error:  cannot create %s: %v", e.display(parent), reason(err))
 
 		return false
@@ -197,7 +194,7 @@ func (e *extractor) file(name string, file *zip.File, mode os.FileMode) {
 
 	perm := mode.Perm()
 	if perm == 0 {
-		perm = filePermissions
+		perm = constants.FilePermissions
 	}
 
 	out, err := e.root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
