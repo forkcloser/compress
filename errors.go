@@ -17,11 +17,7 @@
 
 package compress
 
-import (
-	"errors"
-
-	"github.com/forkcloser/compress/internal/codec"
-)
+import "github.com/forkcloser/compress/internal/codec"
 
 // The fault classes. Every error this module returns, from this package and
 // from the format packages' readers and writers, wraps one of them, with the
@@ -50,6 +46,3 @@ var (
 	// io.ErrClosedPipe is in the chain. The calls came in the wrong order.
 	ErrClosed = codec.ErrClosed
 )
-
-// ErrPathTraversal indicates a tar entry attempted to escape the target directory.
-var ErrPathTraversal = errors.New("tar entry outside target directory")

@@ -51,8 +51,8 @@ func FuzzDecompress(f *testing.F) {
 	})
 }
 
-// FuzzUntarName: whatever an entry is named, Untar writes inside the
-// destination or refuses the entry; nothing lands beside the destination.
+// FuzzUntarName: whatever an entry is named, Untar writes inside the root or
+// refuses the entry; nothing lands beside the root and nothing panics.
 func FuzzUntarName(f *testing.F) {
 	for _, seed := range []string{"a.txt", "./a.txt", "./", ".", "", "../a", "a/../../b", "/etc/passwd", "a//b", "a/./b", `..\a`} {
 		f.Add(seed)
@@ -72,8 +72,18 @@ func FuzzUntarName(f *testing.F) {
 		parent := t.TempDir()
 		dest := filepath.Join(parent, "dest")
 
-		err := compress.Untar(&buf, dest)
-		if err != nil && !errors.Is(err, compress.ErrPathTraversal) && !isWriteError(err) {
+		if err := os.Mkdir(dest, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		root, err := os.OpenRoot(dest)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		defer func() { _ = root.Close() }()
+
+		if err := compress.Untar(&buf, root); err != nil && !errors.Is(err, compress.ErrDestination) {
 			t.Fatalf("Untar(%q): unexpected error class: %v", name, err)
 		}
 
@@ -84,16 +94,8 @@ func FuzzUntarName(f *testing.F) {
 
 		for _, entry := range entries {
 			if entry.Name() != "dest" {
-				t.Fatalf("Untar(%q) wrote %q beside the destination", name, entry.Name())
+				t.Fatalf("Untar(%q) wrote %q beside the root", name, entry.Name())
 			}
 		}
 	})
-}
-
-// isWriteError: the entry was inside, and the filesystem refused the name
-// (a directory where a file goes, a name the platform cannot hold).
-func isWriteError(err error) bool {
-	var pathErr *os.PathError
-
-	return errors.As(err, &pathErr)
 }

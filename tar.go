@@ -22,176 +22,159 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
-	"path/filepath"
-	"strings"
+	"path"
 
+	"github.com/forkcloser/compress/internal/codec"
 	"github.com/forkcloser/compress/internal/constants"
 )
 
-// Tar returns a reader that yields a tar archive of baseDir/relDir.
-// Archive entries are rooted at relDir, preserving the directory structure
-// relative to baseDir. Regular files and directories are archived, as Untar
-// extracts; a symlink, a device or a pipe is left out, except that relDir
-// itself may be a symlink to the directory to archive. The caller must close
-// the returned ReadCloser.
-func Tar(baseDir, relDir string) io.ReadCloser {
+// Tar returns a reader that yields a tar archive of fsys, as archive/tar's
+// Writer.AddFS writes the tree: every directory, regular file and symlink,
+// in walk order, with names relative to the root of fsys. A file of any
+// other kind fails the archive, as AddFS refuses it; a caller with such
+// files in the tree passes a filtered fs.FS. A failure to read the tree is
+// ErrSource; a Read after Close is ErrClosed. The caller must close the
+// returned ReadCloser.
+func Tar(fsys fs.FS) io.ReadCloser {
 	pipeReader, pipeWriter := io.Pipe()
 
 	go func() {
-		_ = pipeWriter.CloseWithError(writeTar(pipeWriter, baseDir, relDir))
+		_ = pipeWriter.CloseWithError(writeTar(pipeWriter, fsys))
 	}()
 
-	return pipeReader
+	return &compressed{reader: pipeReader}
 }
 
-func writeTar(writer io.Writer, baseDir, relDir string) error {
-	// The root is resolved: Walk lstats it, and a root that is a symlink would
-	// be one entry the filter below leaves out, an empty archive in silence.
-	root, err := filepath.EvalSymlinks(filepath.Join(baseDir, relDir))
-	if err != nil {
-		return fmt.Errorf("resolve: %w", err)
+// writeTar archives fsys into w and names what ended it: the tree's failure
+// to be read (ErrSource) or the consumer closing the pipe under the writer
+// (ErrClosed); nil for a clean end.
+func writeTar(w io.Writer, fsys fs.FS) error {
+	destination := &trackedWriter{writer: w}
+	tarWriter := tar.NewWriter(destination)
+
+	err := tarWriter.AddFS(fsys)
+	if err == nil {
+		// The last entry's shortfall, a file shorter than its directory
+		// entry announced, surfaces here: the tree's fault, as a read
+		// failure is, unless the pipe itself failed.
+		err = tarWriter.Close()
 	}
 
-	tarWriter := tar.NewWriter(writer)
-
-	err = filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-
-		return writeTarEntry(tarWriter, root, relDir, path, info)
-	})
-	if err != nil {
-		return fmt.Errorf("walk: %w", err)
-	}
-
-	if err = tarWriter.Close(); err != nil {
-		return fmt.Errorf("close tar: %w", err)
-	}
-
-	return nil
-}
-
-// writeTarEntry writes one walked path: its header, named relDir plus the
-// path under root, and for a regular file its content. Anything else is left
-// out: FileInfoHeader would describe a symlink as one with no target and no
-// size, and Open would then copy the target's content into that entry.
-func writeTarEntry(tarWriter *tar.Writer, root, relDir, path string, info os.FileInfo) error {
-	if !info.IsDir() && !info.Mode().IsRegular() {
+	switch {
+	case err == nil:
 		return nil
+	case destination.err != nil:
+		return fmt.Errorf("%w: %w", ErrClosed, err)
+	default:
+		return fmt.Errorf("%w: %w", ErrSource, err)
 	}
-
-	relPath, err := filepath.Rel(root, path)
-	if err != nil {
-		return fmt.Errorf("rel path: %w", err)
-	}
-
-	// Tar entries use forward slashes.
-	relPath = filepath.ToSlash(filepath.Join(relDir, relPath))
-
-	header, err := tar.FileInfoHeader(info, "")
-	if err != nil {
-		return fmt.Errorf("tar header: %w", err)
-	}
-
-	header.Name = relPath
-
-	if err = tarWriter.WriteHeader(header); err != nil {
-		return fmt.Errorf("write header: %w", err)
-	}
-
-	if info.IsDir() {
-		return nil
-	}
-
-	file, err := os.Open(path) // #nosec G304 -- a path under the directory the caller named
-	if err != nil {
-		return fmt.Errorf("open file: %w", err)
-	}
-
-	defer func() { _ = file.Close() }() // read-only: a close error carries nothing
-
-	if _, err = io.Copy(tarWriter, file); err != nil {
-		return fmt.Errorf("copy file: %w", err)
-	}
-
-	return nil
 }
 
-// Untar extracts a tar archive from reader into destDir.
-// Only regular files and directories are extracted; other entry types
-// (symlinks, etc.) are skipped. Path traversal attempts are rejected.
-func Untar(reader io.Reader, destDir string) error {
-	tarReader := tar.NewReader(reader)
+// trackedWriter remembers whether the writer under the archive failed, so
+// an error out of AddFS can be told apart from the tree's.
+type trackedWriter struct {
+	writer io.Writer
+	err    error
+}
+
+func (t *trackedWriter) Write(p []byte) (int, error) {
+	n, err := t.writer.Write(p)
+	if err != nil && t.err == nil {
+		t.err = err
+	}
+
+	return n, err //nolint:wrapcheck // the pipe's own error, named by writeTar
+}
+
+// Untar extracts a tar archive from reader into root: its directories, with
+// the module's directory permissions, and its regular files, with the
+// module's file permissions; the archive's own modes are not applied, and
+// every other kind of entry, symlinks included, is skipped. Every create
+// goes through root, which confines it to the root's directory at the OS
+// level: an entry named to land outside, by "..", an absolute name or a
+// symlink in the tree, is refused by root, and that refusal, like any
+// failure to create, is ErrDestination with root's error in the chain. An
+// archive that does not parse is ErrCorrupt; a reader that fails is
+// ErrSource.
+func Untar(reader io.Reader, root *os.Root) error {
+	source := codec.Track(reader)
+	tarReader := tar.NewReader(source)
 
 	for {
 		header, err := tarReader.Next()
 		if errors.Is(err, io.EOF) {
-			break
+			return nil
 		}
 
 		if err != nil {
-			return fmt.Errorf("tar read: %w", err)
+			return source.Classify(err)
 		}
 
-		if err := untarEntry(tarReader, header, destDir); err != nil {
+		if err := untarEntry(tarReader, source, header, root); err != nil {
 			return err
 		}
 	}
-
-	return nil
 }
 
 // untarEntry extracts the entry header describes, whose content tarReader is
-// positioned at, refusing a name that escapes destDir. A name for destDir
-// itself ("./", the first entry of most archives) is inside it.
-func untarEntry(tarReader *tar.Reader, header *tar.Header, destDir string) error {
-	destDir = filepath.Clean(destDir)
-	target := filepath.Join(destDir, filepath.Clean(header.Name))
-
-	if target != destDir && !strings.HasPrefix(target, destDir+string(os.PathSeparator)) {
-		return fmt.Errorf("%w: %s", ErrPathTraversal, header.Name)
-	}
+// positioned at. Names are slash-separated and may start with "./" or be
+// "./" itself, the root entry most archives open with.
+func untarEntry(tarReader *tar.Reader, source *codec.Source, header *tar.Header, root *os.Root) error {
+	name := path.Clean(header.Name)
 
 	switch header.Typeflag {
 	case tar.TypeDir:
-		if err := os.MkdirAll(target, constants.DirPermissions); err != nil {
-			return fmt.Errorf("mkdir %s: %w", header.Name, err)
+		if err := root.MkdirAll(name, constants.DirPermissions); err != nil {
+			return fmt.Errorf("%w: mkdir %s: %w", ErrDestination, header.Name, err)
 		}
 	case tar.TypeReg:
-		if err := os.MkdirAll(filepath.Dir(target), constants.DirPermissions); err != nil {
-			return fmt.Errorf("mkdir parent %s: %w", header.Name, err)
+		if dir := path.Dir(name); dir != "." {
+			if err := root.MkdirAll(dir, constants.DirPermissions); err != nil {
+				return fmt.Errorf("%w: mkdir %s: %w", ErrDestination, dir, err)
+			}
 		}
 
-		if err := extractFile(target, tarReader); err != nil {
+		if err := extractFile(root, name, tarReader, source); err != nil {
 			return fmt.Errorf("write %s: %w", header.Name, err)
 		}
 	default:
-		// Skip unsupported entry types (symlinks, etc.).
+		// Symlinks, devices, pipes: skipped.
 	}
 
 	return nil
 }
 
-func extractFile(path string, reader io.Reader) error {
-	out, err := os.OpenFile(
-		path,
-		os.O_RDWR|os.O_CREATE|os.O_TRUNC,
-		constants.FilePermissions,
-	) // #nosec G304 -- under destDir
+// extractFile writes the entry's content to name under root. A file whose
+// content could not be written whole is removed, so a failed extraction
+// leaves no partial file that a later run would take for the entry.
+func extractFile(root *os.Root, name string, content io.Reader, source *codec.Source) error {
+	out, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, constants.FilePermissions)
 	if err != nil {
-		return fmt.Errorf("create: %w", err)
+		return fmt.Errorf("%w: %w", ErrDestination, err)
 	}
 
-	if _, err := io.Copy(out, reader); err != nil {
-		_ = out.Close()
+	file := &trackedWriter{writer: out}
 
-		return fmt.Errorf("copy: %w", err)
+	if _, err := io.Copy(file, content); err != nil {
+		_ = out.Close()
+		_ = root.Remove(name)
+
+		// io.Copy's error is the file's when it recorded one; otherwise the
+		// content's: the source failed, or the archive ends inside the
+		// entry, which the source tracker names ErrSource or ErrCorrupt.
+		if file.err != nil {
+			return fmt.Errorf("%w: %w", ErrDestination, err)
+		}
+
+		return source.Classify(err)
 	}
 
 	if err := out.Close(); err != nil {
-		return fmt.Errorf("close: %w", err)
+		_ = root.Remove(name)
+
+		return fmt.Errorf("%w: %w", ErrDestination, err)
 	}
 
 	return nil
