@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/forkcloser/xos"
 )
 
 // Exit statuses, the tools'.
@@ -438,7 +440,7 @@ func (r *runner) file(name string) {
 // toStream decompresses or compresses name to standard output, or to
 // nothing under --test; the file stays.
 func (r *runner) toStream(name string, info os.FileInfo) {
-	source, err := os.Open(name) // #nosec G304 -- the file is the command's own argument
+	source, err := xos.Open(name)
 	if err != nil {
 		r.failf("%s: %v", name, reason(err))
 
@@ -465,7 +467,7 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 		return
 	}
 
-	source, err := os.Open(name) // #nosec G304 -- the file is the command's own argument
+	source, err := xos.Open(name)
 	if err != nil {
 		r.failf("%s: %v", name, reason(err))
 
@@ -479,7 +481,7 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
 	}
 
-	out, err := os.OpenFile(target, flags, info.Mode().Perm()) // #nosec G304 -- beside the given file
+	out, err := xos.OpenFile(target, flags, info.Mode().Perm())
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			r.warnf("%s already exists; not overwritten", target)

@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/forkcloser/xos"
 )
 
 // Exit statuses, GNU tar's.
@@ -135,7 +137,7 @@ func create(opts *options, stdout, stderr io.Writer) (bool, error) {
 	var file *os.File
 
 	if opts.archive != "" && opts.archive != "-" {
-		created, err := os.Create(opts.archive) // #nosec G304 -- the archive is the command's own -f argument
+		created, err := xos.Create(opts.archive)
 		if err != nil {
 			return false, fmt.Errorf("%s: Cannot open: %w", opts.archive, errReason(err))
 		}
@@ -183,7 +185,7 @@ func openArchive(opts *options, stdin io.Reader) (io.ReadCloser, func(), error) 
 	release := func() {}
 
 	if opts.archive != "" && opts.archive != "-" {
-		file, err := os.Open(opts.archive) // #nosec G304 -- the archive is the command's own -f argument
+		file, err := xos.Open(opts.archive)
 		if err != nil {
 			return nil, nil, fmt.Errorf("%s: Cannot open: %w", opts.archive, errReason(err))
 		}

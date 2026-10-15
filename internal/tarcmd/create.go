@@ -11,6 +11,8 @@ import (
 	"slices"
 	"strings"
 	"time"
+
+	"github.com/forkcloser/xos"
 )
 
 var errShortRead = errors.New("file shrank while being read")
@@ -49,7 +51,7 @@ func (c *creator) addMember(entry member) error {
 
 // readList reads a -T file: one member name per line.
 func readList(file string) ([]string, error) {
-	f, err := os.Open(file) // #nosec G304 -- the list is the command's own -T argument
+	f, err := xos.Open(file)
 	if err != nil {
 		return nil, fmt.Errorf("%s: Cannot open: %w", file, errReason(err))
 	}
@@ -148,7 +150,7 @@ func (c *creator) addPath(fsPath, archiveName string, info os.FileInfo) error {
 	var content *os.File
 
 	if header.Typeflag == tar.TypeReg {
-		content, err = os.Open(fsPath) // #nosec G304 -- the file is a member the command was given, or under one
+		content, err = xos.Open(fsPath)
 		if err != nil {
 			c.reportf("%s: Cannot open: %v", archiveName, errReason(err))
 
@@ -188,7 +190,7 @@ func (c *creator) addPath(fsPath, archiveName string, info os.FileInfo) error {
 // addChildren archives a directory's entries, in the directory's order or
 // sorted by name under --sort=name.
 func (c *creator) addChildren(fsPath, archiveName string) error {
-	dir, err := os.Open(fsPath) // #nosec G304 -- the directory is a member the command was given, or under one
+	dir, err := xos.Open(fsPath)
 	if err != nil {
 		c.reportf("%s: Cannot open: %v", archiveName, errReason(err))
 
