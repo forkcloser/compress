@@ -21,13 +21,15 @@ import (
 	"io"
 	"os"
 	"sync"
+
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 const (
 	// readAheadBlock is one decoded block; readAheadDepth is how many may
 	// wait for the consumer. With the block in the decoder's hands and the
 	// one in the caller's, six megabytes per stream.
-	readAheadBlock = MiB
+	readAheadBlock = constants.MiB
 	readAheadDepth = 4
 )
 

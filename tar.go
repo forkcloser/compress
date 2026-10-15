@@ -25,11 +25,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-)
 
-const (
-	dirPermissions  os.FileMode = 0o755
-	filePermissions os.FileMode = 0o644
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 // Tar returns a reader that yields a tar archive of baseDir/relDir.
@@ -159,11 +156,11 @@ func untarEntry(tarReader *tar.Reader, header *tar.Header, destDir string) error
 
 	switch header.Typeflag {
 	case tar.TypeDir:
-		if err := os.MkdirAll(target, dirPermissions); err != nil {
+		if err := os.MkdirAll(target, constants.DirPermissions); err != nil {
 			return fmt.Errorf("mkdir %s: %w", header.Name, err)
 		}
 	case tar.TypeReg:
-		if err := os.MkdirAll(filepath.Dir(target), dirPermissions); err != nil {
+		if err := os.MkdirAll(filepath.Dir(target), constants.DirPermissions); err != nil {
 			return fmt.Errorf("mkdir parent %s: %w", header.Name, err)
 		}
 
@@ -178,7 +175,11 @@ func untarEntry(tarReader *tar.Reader, header *tar.Header, destDir string) error
 }
 
 func extractFile(path string, reader io.Reader) error {
-	out, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|os.O_TRUNC, filePermissions) // #nosec G304 -- under destDir
+	out, err := os.OpenFile(
+		path,
+		os.O_RDWR|os.O_CREATE|os.O_TRUNC,
+		constants.FilePermissions,
+	) // #nosec G304 -- under destDir
 	if err != nil {
 		return fmt.Errorf("create: %w", err)
 	}

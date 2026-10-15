@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"github.com/forkcloser/compress"
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 // scripted is a decoder that hands out data in chunks of at most step, then
@@ -65,9 +66,9 @@ func (s *scripted) Close() error {
 func TestReadAheadBytesAndErrors(t *testing.T) {
 	t.Parallel()
 
-	want := payload(3*compress.MiB + 7)
+	want := payload(3*constants.MiB + 7)
 
-	for _, step := range []int{1, 7, 4096, 64 * compress.KiB, compress.MiB, 2 * compress.MiB} {
+	for _, step := range []int{1, 7, 4096, 64 * constants.KiB, constants.MiB, 2 * constants.MiB} {
 		for _, final := range []error{io.EOF, io.ErrUnexpectedEOF, errBoom} {
 			t.Run(strconv.Itoa(step)+"/"+final.Error(), func(t *testing.T) {
 				t.Parallel()
@@ -172,7 +173,7 @@ func eventually(t *testing.T, what string, f func()) {
 func TestReadAheadClose(t *testing.T) {
 	t.Parallel()
 
-	decoder := &scripted{data: payload(64 * compress.MiB), step: compress.MiB, final: io.EOF, closes: errBoom}
+	decoder := &scripted{data: payload(64 * constants.MiB), step: constants.MiB, final: io.EOF, closes: errBoom}
 	reader := compress.ReadAhead(decoder)
 
 	buf := make([]byte, 10)
@@ -209,7 +210,7 @@ func TestReadAheadClose(t *testing.T) {
 func TestReadAheadCloseUnread(t *testing.T) {
 	t.Parallel()
 
-	decoder := &scripted{data: payload(8 * compress.MiB), step: compress.MiB, final: io.EOF}
+	decoder := &scripted{data: payload(8 * constants.MiB), step: constants.MiB, final: io.EOF}
 	reader := compress.ReadAhead(decoder)
 
 	eventually(t, "Close", func() {

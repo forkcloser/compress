@@ -17,6 +17,7 @@ import (
 	"github.com/forkcloser/compress"
 	"github.com/forkcloser/compress/bzip2"
 	"github.com/forkcloser/compress/gzip"
+	"github.com/forkcloser/compress/internal/constants"
 	"github.com/forkcloser/compress/lz4"
 	"github.com/forkcloser/compress/xz"
 )
@@ -27,7 +28,7 @@ var (
 )
 
 // readBufferSize amortizes the archive's reads for every decoder.
-const readBufferSize = 256 * compress.KiB
+const readBufferSize = 256 * constants.KiB
 
 // magics are the leading bytes of each compressed stream, longest first so a
 // prefix of another never wins.

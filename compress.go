@@ -26,10 +26,12 @@ import (
 	"sync"
 
 	"github.com/klauspost/compress/zstd"
+
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 // inputBufSize amortizes syscalls for every format.
-const inputBufSize = 256 * KiB
+const inputBufSize = 256 * constants.KiB
 
 // Decompressor creates a decompressed reader from a compressed stream.
 type Decompressor func(io.Reader) (io.ReadCloser, error)

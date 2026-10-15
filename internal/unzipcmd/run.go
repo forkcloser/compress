@@ -8,6 +8,8 @@ import (
 	"io/fs"
 	"os"
 	"strings"
+
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 // Exit statuses, Info-ZIP's.
@@ -159,7 +161,7 @@ func extract(opts *options, files []*zip.File, stdout, stderr io.Writer, status 
 		dir = "."
 	}
 
-	if err := os.MkdirAll(dir, parentPermissions); err != nil {
+	if err := os.MkdirAll(dir, constants.DirPermissions); err != nil {
 		fmt.Fprintf(stderr, "checkdir error:  cannot create %s\n", dir)
 
 		return ExitError
