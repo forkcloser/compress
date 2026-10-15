@@ -18,25 +18,28 @@
 package gzip
 
 import (
-	"fmt"
 	"io"
 
-	"github.com/klauspost/compress/gzip"
-
 	"github.com/forkcloser/compress"
+	"github.com/forkcloser/compress/internal/codec"
 )
 
 //nolint:gochecknoinits // Registration pattern requires init.
 func init() {
-	compress.Register("gzip", []byte{0x1F, 0x8B}, New)
+	compress.Register("gzip", []byte{0x1F, 0x8B}, codec.Gzip)
 }
 
-// New returns a gzip decompressed reader, decoding ahead of its consumer.
-func New(reader io.Reader) (io.ReadCloser, error) {
-	decoder, err := gzip.NewReader(reader)
-	if err != nil {
-		return nil, fmt.Errorf("gzip decoder: %w", err)
-	}
+// NewReader returns a reader that decompresses the gzip stream r holds. Its
+// errors are compress's classes: ErrCorrupt for a stream the decoder refuses
+// or cut short, ErrSource for a failure of r, ErrClosed for a Read after
+// Close.
+func NewReader(r io.Reader) (io.ReadCloser, error) {
+	return codec.Reader(codec.Gzip, r)
+}
 
-	return compress.ReadAhead(decoder), nil
+// NewWriter returns a writer that compresses to w as gzip; Close ends the
+// stream and must be called. Its errors are compress's classes:
+// ErrDestination for a failure of w, ErrClosed for a Write after Close.
+func NewWriter(w io.Writer) (io.WriteCloser, error) {
+	return codec.Writer(codec.GzipWriter, w)
 }

@@ -12,18 +12,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	kgzip "github.com/klauspost/compress/gzip"
-	"github.com/klauspost/compress/zstd"
-	plz4 "github.com/pierrec/lz4/v4"
-
-	uxz "github.com/forkcloser/xz"
-
-	"github.com/forkcloser/compress"
 	"github.com/forkcloser/compress/bzip2"
 	"github.com/forkcloser/compress/gzip"
 	"github.com/forkcloser/compress/internal/constants"
 	"github.com/forkcloser/compress/lz4"
 	"github.com/forkcloser/compress/xz"
+	"github.com/forkcloser/compress/zstd"
 )
 
 var (
@@ -261,15 +255,15 @@ func openReader(wrap compression, program string, reader io.Reader) (io.ReadClos
 	case compressNone, compressAuto:
 		return io.NopCloser(buffered), nil
 	case compressGzip:
-		return gzip.New(buffered)
+		return gzip.NewReader(buffered)
 	case compressXz:
-		return xz.New(buffered)
+		return xz.NewReader(buffered)
 	case compressBzip2:
-		return bzip2.New(buffered)
+		return bzip2.NewReader(buffered)
 	case compressZstd:
-		return compress.Decompress(buffered)
+		return zstd.NewReader(buffered)
 	case compressLz4:
-		return lz4.New(buffered)
+		return lz4.NewReader(buffered)
 	case compressProgram:
 	}
 
@@ -293,23 +287,13 @@ func openWriter(wrap compression, program string, writer io.Writer) (io.WriteClo
 	case compressNone, compressAuto:
 		return nopWriteCloser{writer}, nil
 	case compressGzip:
-		return kgzip.NewWriter(writer), nil
+		return gzip.NewWriter(writer)
 	case compressXz:
-		encoder, err := uxz.NewWriter(writer)
-		if err != nil {
-			return nil, fmt.Errorf("xz encoder: %w", err)
-		}
-
-		return encoder, nil
+		return xz.NewWriter(writer)
 	case compressZstd:
-		encoder, err := zstd.NewWriter(writer)
-		if err != nil {
-			return nil, fmt.Errorf("zstd encoder: %w", err)
-		}
-
-		return encoder, nil
+		return zstd.NewWriter(writer)
 	case compressLz4:
-		return plz4.NewWriter(writer), nil
+		return lz4.NewWriter(writer)
 	case compressBzip2:
 		return nil, errNoBzip2Writer
 	}

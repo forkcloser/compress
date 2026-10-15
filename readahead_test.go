@@ -24,7 +24,6 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"os"
 	"strconv"
 	"testing"
 	"time"
@@ -168,7 +167,7 @@ func eventually(t *testing.T, what string, f func()) {
 }
 
 // TestReadAheadClose: Close part-way returns, closes the decoder once with
-// its error, is idempotent, and every Read after it is os.ErrClosed, blocks
+// its error, is idempotent, and every Read after it is compress.ErrClosed, blocks
 // still queued or not.
 func TestReadAheadClose(t *testing.T) {
 	t.Parallel()
@@ -198,8 +197,8 @@ func TestReadAheadClose(t *testing.T) {
 
 	eventually(t, "Read after Close", func() {
 		for range 10 {
-			if _, err := reader.Read(buf); !errors.Is(err, os.ErrClosed) {
-				t.Errorf("got %v, want %v", err, os.ErrClosed)
+			if _, err := reader.Read(buf); !errors.Is(err, compress.ErrClosed) {
+				t.Errorf("got %v, want %v", err, compress.ErrClosed)
 			}
 		}
 	})
@@ -223,13 +222,13 @@ func TestReadAheadCloseUnread(t *testing.T) {
 		t.Fatalf("decoder closed %d times", decoder.closed)
 	}
 
-	if _, err := reader.Read(make([]byte, 1)); !errors.Is(err, os.ErrClosed) {
-		t.Fatalf("got %v, want %v", err, os.ErrClosed)
+	if _, err := reader.Read(make([]byte, 1)); !errors.Is(err, compress.ErrClosed) {
+		t.Fatalf("got %v, want %v", err, compress.ErrClosed)
 	}
 }
 
 // TestReadAheadCloseWhileParked: a Read parked on a decoder whose source has
-// stalled returns os.ErrClosed when another goroutine closes the reader; Close
+// stalled returns compress.ErrClosed when another goroutine closes the reader; Close
 // itself returns once the decoder's Read does.
 func TestReadAheadCloseWhileParked(t *testing.T) {
 	t.Parallel()
@@ -252,8 +251,8 @@ func TestReadAheadCloseWhileParked(t *testing.T) {
 
 	select {
 	case err := <-readErr:
-		if !errors.Is(err, os.ErrClosed) { // released by Close, before the decoder's Read returns
-			t.Fatalf("got %v, want %v", err, os.ErrClosed)
+		if !errors.Is(err, compress.ErrClosed) { // released by Close, before the decoder's Read returns
+			t.Fatalf("got %v, want %v", err, compress.ErrClosed)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("the parked Read did not return after Close")
