@@ -28,9 +28,10 @@ writer, err := gzip.NewWriter(file)        // tar.NewWriter(writer) builds a .ta
 ```
 
 `Compress` is the zstd encoder, `Decompress` picks the decoder by magic,
-`ReadAhead` runs a serial decoder a few blocks ahead of a slow consumer, and
-`Tar`/`Untar` archive and extract a tree of regular files and directories,
-refusing an entry that would land outside the destination. Every error wraps
+`ReadAhead` runs a serial decoder a few blocks ahead of a slow consumer,
+`Tar` archives an `fs.FS` as `archive/tar` writes a tree, and `Untar`
+extracts into an `*os.Root`, which holds every entry inside its directory at
+the OS level; the library opens no path of its own. Every error wraps
 one of five classes, for `errors.Is`: `ErrUnknownFormat` (no registered
 format's magic), `ErrCorrupt` (a stream its decoder refuses, or cut short),
 `ErrSource` (the reader underneath failed, its error in the chain),
