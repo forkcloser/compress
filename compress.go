@@ -27,6 +27,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
+	"github.com/forkcloser/compress/internal/codec"
 	"github.com/forkcloser/compress/internal/constants"
 )
 
@@ -65,42 +66,77 @@ func Register(name string, magic []byte, fn Decompressor) {
 
 //nolint:gochecknoinits // Registration pattern requires init.
 func init() {
-	Register("zstd", []byte{0x28, 0xB5, 0x2F, 0xFD}, decompressZstd)
+	Register("zstd", []byte{0x28, 0xB5, 0x2F, 0xFD}, codec.Zstd)
 }
 
 // Compress returns a reader that yields zstd-compressed data from the input.
-// The caller must close the returned ReadCloser to release encoder resources.
-func Compress(reader io.Reader) (io.ReadCloser, error) {
+// A failure of the input is ErrSource on the read; the caller must close the
+// returned ReadCloser to release the encoder, and a Read after that is
+// ErrClosed.
+func Compress(reader io.Reader) io.ReadCloser {
 	pipeReader, pipeWriter := io.Pipe()
+	source := codec.Track(reader)
 
+	// NewWriter fails only on an option, and none is passed.
 	encoder, err := zstd.NewWriter(pipeWriter)
 	if err != nil {
-		_ = pipeWriter.Close()
-
-		return nil, fmt.Errorf("zstd encoder: %w", err)
+		panic("compress: zstd.NewWriter without options: " + err.Error())
 	}
 
 	go func() {
-		_, copyErr := io.Copy(encoder, reader)
-
+		_, copyErr := io.Copy(encoder, source)
 		closeErr := encoder.Close()
 
-		if copyErr != nil {
-			_ = pipeWriter.CloseWithError(copyErr)
-		} else {
-			_ = pipeWriter.CloseWithError(closeErr)
-		}
+		_ = pipeWriter.CloseWithError(compressFailure(source, copyErr, closeErr))
 	}()
 
-	return pipeReader, nil
+	return &compressed{reader: pipeReader}
+}
+
+// compressFailure names what ended the encoding: the source's failure, or the
+// consumer closing the pipe under the encoder, whose writes are then
+// io.ErrClosedPipe. Nil for a clean end.
+func compressFailure(source *codec.Source, copyErr, closeErr error) error {
+	if copyErr != nil {
+		if source.Failure() != nil {
+			return fmt.Errorf("%w: %w", ErrSource, copyErr)
+		}
+
+		return fmt.Errorf("%w: %w", ErrClosed, copyErr)
+	}
+
+	if closeErr != nil {
+		return fmt.Errorf("%w: %w", ErrClosed, closeErr)
+	}
+
+	return nil
+}
+
+// compressed is Compress's result: the pipe, whose own closed error is named.
+type compressed struct {
+	reader *io.PipeReader
+}
+
+func (c *compressed) Read(p []byte) (int, error) {
+	n, err := c.reader.Read(p)
+	if errors.Is(err, io.ErrClosedPipe) {
+		return n, fmt.Errorf("%w: %w", ErrClosed, err)
+	}
+
+	return n, err //nolint:wrapcheck // nil, io.EOF, or what compressFailure named
+}
+
+func (c *compressed) Close() error {
+	return c.reader.Close() //nolint:wrapcheck // a pipe reader's Close is always nil
 }
 
 // Decompress auto-detects the compression format from magic bytes and returns
 // a streaming decompressed reader. Only formats that have been registered
 // (via Register or sub-package init) are recognized: anything else is
-// ErrUnknownFormat, an empty stream is io.ErrUnexpectedEOF, and a source
-// that fails before its magic is read reports its own error.
-// The caller must close the returned ReadCloser to release decoder resources.
+// ErrUnknownFormat; an empty stream is ErrCorrupt, as is one that its
+// decoder refuses or that ends early, here or on a later Read; a source that
+// fails, here or later, is ErrSource. The caller must close the returned
+// ReadCloser to release decoder resources; a Read after that is ErrClosed.
 func Decompress(reader io.Reader) (io.ReadCloser, error) {
 	formatsMu.RLock()
 
@@ -114,46 +150,28 @@ func Decompress(reader io.Reader) (io.ReadCloser, error) {
 	}
 
 	// Buffer the input to batch syscalls for decompressors that make many small reads.
-	buffered := bufio.NewReaderSize(reader, inputBufSize)
+	source := codec.Track(reader)
+	buffered := bufio.NewReaderSize(source, inputBufSize)
 
 	header, err := buffered.Peek(peek)
 	if err != nil && len(header) == 0 {
 		if errors.Is(err, io.EOF) {
-			err = io.ErrUnexpectedEOF
+			return nil, fmt.Errorf("%w: empty stream: %w", ErrCorrupt, io.ErrUnexpectedEOF)
 		}
 
-		return nil, fmt.Errorf("read magic bytes: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrSource, err)
 	}
 
 	for _, f := range fmts {
 		if bytes.HasPrefix(header, f.magic) {
-			return f.new(buffered)
+			decoder, err := f.new(buffered)
+			if err != nil {
+				return nil, source.Classify(err)
+			}
+
+			return codec.NewReader(decoder, source), nil
 		}
 	}
 
 	return nil, fmt.Errorf("%w (header: %x)", ErrUnknownFormat, header)
-}
-
-func decompressZstd(reader io.Reader) (io.ReadCloser, error) {
-	decoder, err := zstd.NewReader(reader)
-	if err != nil {
-		return nil, fmt.Errorf("zstd decoder: %w", err)
-	}
-
-	return &zstdReader{decoder: decoder}, nil
-}
-
-// zstdReader adapts zstd.Decoder to io.ReadCloser.
-type zstdReader struct {
-	decoder *zstd.Decoder
-}
-
-func (r *zstdReader) Read(p []byte) (int, error) {
-	return r.decoder.Read(p) //nolint:wrapcheck // Pass-through.
-}
-
-func (r *zstdReader) Close() error {
-	r.decoder.Close()
-
-	return nil
 }

@@ -11,23 +11,31 @@ One module, one set of behaviors, verified releases.
 ## The library
 
 The library is primordium's `compress` package, moved here so it can ship
-binaries. zstd is built in; the other formats register themselves on import:
+binaries. zstd decompression is built in; the other formats register
+themselves on import, and each format package is a codec of its own, a
+`NewReader` and a `NewWriter`, for a consumer that names its format, as one
+building an archive does:
 
 ```go
 import (
     "github.com/forkcloser/compress"
-    _ "github.com/forkcloser/compress/gzip"
+    "github.com/forkcloser/compress/gzip"
     _ "github.com/forkcloser/compress/xz"
 )
 
 reader, err := compress.Decompress(stream) // the format from its magic bytes
+writer, err := gzip.NewWriter(file)        // tar.NewWriter(writer) builds a .tar.gz
 ```
 
-`Compress` is the zstd encoder, `Decompress` picks the decoder by magic
-(`ErrUnknownFormat` for anything unregistered, `io.ErrUnexpectedEOF` for an
-empty stream), `ReadAhead` runs a serial decoder a few blocks ahead of a slow
-consumer, and `Tar`/`Untar` archive and extract a tree of regular files and
-directories, refusing an entry that would land outside the destination.
+`Compress` is the zstd encoder, `Decompress` picks the decoder by magic,
+`ReadAhead` runs a serial decoder a few blocks ahead of a slow consumer, and
+`Tar`/`Untar` archive and extract a tree of regular files and directories,
+refusing an entry that would land outside the destination. Every error wraps
+one of five classes, for `errors.Is`: `ErrUnknownFormat` (no registered
+format's magic), `ErrCorrupt` (a stream its decoder refuses, or cut short),
+`ErrSource` (the reader underneath failed, its error in the chain),
+`ErrDestination` (the writer underneath failed, likewise) and `ErrClosed` (a
+Read or Write after Close). The cause stays in the chain.
 
 ## The commands
 

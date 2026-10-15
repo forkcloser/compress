@@ -65,10 +65,7 @@ func BenchmarkCompress(b *testing.B) {
 	b.SetBytes(int64(len(want)))
 
 	for b.Loop() {
-		reader, err := compress.Compress(bytes.NewReader(want))
-		if err != nil {
-			b.Fatal(err)
-		}
+		reader := compress.Compress(bytes.NewReader(want))
 
 		if _, err := io.Copy(io.Discard, reader); err != nil {
 			b.Fatal(err)

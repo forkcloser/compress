@@ -18,30 +18,28 @@
 package lz4
 
 import (
-	"fmt"
 	"io"
 
-	plz4 "github.com/pierrec/lz4/v4"
-
 	"github.com/forkcloser/compress"
+	"github.com/forkcloser/compress/internal/codec"
 )
 
 //nolint:gochecknoinits // Registration pattern requires init.
 func init() {
-	compress.Register("lz4", []byte{0x04, 0x22, 0x4D, 0x18}, New)
+	compress.Register("lz4", []byte{0x04, 0x22, 0x4D, 0x18}, codec.Lz4)
 }
 
-// New returns an lz4 decompressed reader that decodes frame blocks on
-// GOMAXPROCS goroutines. Abandoning a partially consumed reader parks those
-// workers and their block buffers for good, as the library has no
-// cancellation: a consumer that stops short of EOF by design (a tar reader
-// halting at the end-of-archive marker) must drain the rest before dropping
-// the reader.
-func New(reader io.Reader) (io.ReadCloser, error) {
-	decoder := plz4.NewReader(reader)
-	if err := decoder.Apply(plz4.ConcurrencyOption(-1)); err != nil {
-		return nil, fmt.Errorf("lz4 concurrency: %w", err)
-	}
+// NewReader returns a reader that decompresses the lz4 stream r holds. Its
+// errors are compress's classes: ErrCorrupt for a stream the decoder refuses
+// or cut short, ErrSource for a failure of r, ErrClosed for a Read after
+// Close.
+func NewReader(r io.Reader) (io.ReadCloser, error) {
+	return codec.Reader(codec.Lz4, r)
+}
 
-	return io.NopCloser(decoder), nil
+// NewWriter returns a writer that compresses to w as lz4; Close ends the
+// stream and must be called. Its errors are compress's classes:
+// ErrDestination for a failure of w, ErrClosed for a Write after Close.
+func NewWriter(w io.Writer) (io.WriteCloser, error) {
+	return codec.Writer(codec.Lz4Writer, w)
 }

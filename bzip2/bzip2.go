@@ -18,18 +18,21 @@
 package bzip2
 
 import (
-	gobzip2 "compress/bzip2"
 	"io"
 
 	"github.com/forkcloser/compress"
+	"github.com/forkcloser/compress/internal/codec"
 )
 
 //nolint:gochecknoinits // Registration pattern requires init.
 func init() {
-	compress.Register("bzip2", []byte{0x42, 0x5A, 0x68}, New)
+	compress.Register("bzip2", []byte{0x42, 0x5A, 0x68}, codec.Bzip2)
 }
 
-// New returns a bzip2 decompressed reader, decoding ahead of its consumer.
-func New(reader io.Reader) (io.ReadCloser, error) {
-	return compress.ReadAhead(io.NopCloser(gobzip2.NewReader(reader))), nil
+// NewReader returns a reader that decompresses the bzip2 stream r holds. Its
+// errors are compress's classes: ErrCorrupt for a stream the decoder refuses
+// or cut short, ErrSource for a failure of r, ErrClosed for a Read after
+// Close. There is no writer: Go has no bzip2 encoder.
+func NewReader(r io.Reader) (io.ReadCloser, error) {
+	return codec.Reader(codec.Bzip2, r)
 }

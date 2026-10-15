@@ -18,14 +18,21 @@
 // Package compress provides streaming zstd compression, registry-based
 // decompression, and tar archiving.
 //
-// Zstd compression and decompression are built in. Additional decompression
-// formats are available via side-effect imports:
+// Zstd decompression is built in. Importing a format package registers its
+// decoder with Decompress, and each is a codec in its own right, a NewReader
+// and a NewWriter (bzip2 has no writer: Go has none) for a consumer that
+// names its format, as one building an archive does:
 //
-//	import _ "github.com/forkcloser/compress/gzip"
-//	import _ "github.com/forkcloser/compress/xz"
-//	import _ "github.com/forkcloser/compress/bzip2"
-//	import _ "github.com/forkcloser/compress/lz4"
+//	import "github.com/forkcloser/compress/gzip"
+//	import "github.com/forkcloser/compress/xz"
+//	import "github.com/forkcloser/compress/lz4"
+//	import "github.com/forkcloser/compress/zstd"
+//	import "github.com/forkcloser/compress/bzip2"
 //
-// The module also ships the tar, xz and gzip commands under cmd/, pure-Go
-// stand-ins for the tools of the same names.
+// Every error the module returns wraps one of five classes, compared with
+// errors.Is: ErrUnknownFormat, ErrCorrupt, ErrSource, ErrDestination and
+// ErrClosed; the cause is in the chain.
+//
+// The module also ships the tar, xz, gzip, zstd, zip and unzip commands under
+// cmd/, pure-Go stand-ins for the tools of the same names.
 package compress
