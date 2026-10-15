@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
@@ -26,13 +27,17 @@ var (
 	errIsDir           = errors.New("Is a directory")
 	errUnsupportedType = errors.New("Cannot mknod: entry type is not supported")
 	errLinkTarget      = errors.New("Cannot hard link: target not extracted")
+	errAboveRoot       = errors.New("Member name resolves above the file system root")
 )
 
 // extractor writes an archive's entries under one directory, through an
 // os.Root so that no entry, however named, lands or links outside it.
 type extractor struct {
-	opts   *options
+	opts *options
+	// root is -C's directory, or under -P the file system root of -C's
+	// volume, with base -C's absolute path: -P names are where they say.
 	root   *os.Root
+	base   string
 	stdout io.Writer
 	stderr io.Writer
 
@@ -89,6 +94,10 @@ func (e *extractor) entry(reader *tar.Reader, header *tar.Header) {
 		return
 	}
 
+	if excluded(e.opts.excludes, header.Name) {
+		return
+	}
+
 	name, ok := e.memberName(header.Name)
 	if !ok {
 		return
@@ -128,6 +137,10 @@ func (e *extractor) entry(reader *tar.Reader, header *tar.Header) {
 // and no ".." element (such an entry is refused). The second result is
 // false for an entry to skip.
 func (e *extractor) memberName(archiveName string) (string, bool) {
+	if e.opts.absoluteNames {
+		return e.absoluteName(archiveName)
+	}
+
 	name := archiveName
 
 	if strings.HasPrefix(name, "/") {
@@ -160,6 +173,54 @@ func (e *extractor) memberName(archiveName string) (string, bool) {
 	}
 
 	return path.Join(elements[e.opts.stripComponents:]...), true
+}
+
+// absoluteName is memberName under -P: GNU tar's --absolute-names, which
+// keeps a leading slash and "..". An absolute name is that path; a relative
+// one is under -C's directory, ".." resolved against it. The result is the
+// path under the file system root e.root is opened at. --strip-components
+// drops leading elements first, ".." counting as one.
+func (e *extractor) absoluteName(archiveName string) (string, bool) {
+	native := filepath.FromSlash(archiveName)
+	volume := filepath.VolumeName(native)
+	absolute := filepath.IsAbs(native) || strings.HasPrefix(archiveName, "/")
+
+	var elements []string
+
+	for element := range strings.SplitSeq(filepath.ToSlash(native[len(volume):]), "/") {
+		if element != "" && element != "." {
+			elements = append(elements, element)
+		}
+	}
+
+	if len(elements) < e.opts.stripComponents {
+		return "", false
+	}
+
+	rest := filepath.FromSlash(path.Join(elements[e.opts.stripComponents:]...))
+
+	full := filepath.Join(e.base, rest)
+
+	if absolute {
+		if volume == "" {
+			volume = filepath.VolumeName(e.base)
+		}
+
+		full = filepath.Join(volume+string(filepath.Separator), rest)
+	}
+
+	name, err := filepath.Rel(filepath.VolumeName(full)+string(filepath.Separator), full)
+	if err != nil || name == ".." || strings.HasPrefix(name, ".."+string(filepath.Separator)) {
+		e.reportf("%s: %v", archiveName, errAboveRoot)
+
+		return "", false
+	}
+
+	if name == "." {
+		return "", true
+	}
+
+	return filepath.ToSlash(name), true
 }
 
 func (e *extractor) dir(name string, header *tar.Header) error {
