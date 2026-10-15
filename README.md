@@ -32,17 +32,25 @@ directories, refusing an entry that would land outside the destination.
 ## The commands
 
 Each command keeps the grammar, output and exit statuses of the tool it
-stands in for, for the subset of options the rig's scripts and curl-for-win
-use, and refuses anything else as a usage error rather than guessing.
+stands in for, for the subset of options the rig's scripts, curl-for-win and
+actions/cache use, and refuses anything else as a usage error rather than
+guessing.
 
-- **tar**: `-c`, `-x`, `-t`; `-f`, `-C`, `-v`, `-T`, `-p`, `-m`; `-z`, `-J`,
-  `-j` (reading only), `--zstd`, `--lz4`, `-a`; `--strip-components`,
-  `--no-same-owner`, `--no-same-permissions`, `--format`, `--owner`, `--group`,
-  `--numeric-owner`, `--mtime`, `--sort`, `--no-recursion`. The old-style
-  first argument (`xf`, `cvzf`) and clustered short options work as in GNU
-  tar; a read without a compression flag picks the decoder by magic. Extraction
+- **tar**: `-c`, `-x`, `-t`; `-f`, `-C`, `-v`, `-T`, `-p`, `-m`, `-P`; `-z`,
+  `-J`, `-j` (reading only), `--zstd`, `--lz4`, `-a`, `-I`
+  (`--use-compress-program`); `--strip-components`, `--no-same-owner`,
+  `--no-same-permissions`, `--format`, `--posix`, `--owner`, `--group`,
+  `--numeric-owner`, `--mtime`, `--sort`, `--no-recursion`, `--exclude`,
+  `--delay-directory-restore`, `--force-local`. The old-style first argument
+  (`xf`, `cvzf`) and clustered short options work as in GNU tar; a read
+  without a compression flag picks the decoder by magic, and a known
+  compressor given to `-I` (`zstd`, `zstdmt`, `unzstd`, `gzip`, `xz`, …) is
+  the built-in codec, any other a filter run with `-d` to read. Extraction
   goes through `os.Root`, so no entry, however named or linked, lands outside
-  the destination. Exit 0, 2 after any error, 64 for a usage error.
+  the destination; `-P` is GNU's `--absolute-names`, the exception it names:
+  names keep their leading slash and `..`, and land where they say, which is
+  what actions/cache archives with (its manifest names a cache outside the
+  workspace as `../…`). Exit 0, 2 after any error, 64 for a usage error.
 - **xz**, **gzip** and **zstd**: files compressed beside themselves,
   decompressed back by suffix, standard streams when no file is named;
   `-c`, `-d`, `-f`, `-k`, `-q`, `-t`, the levels (`-1`…`-9`, zstd's up to

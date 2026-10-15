@@ -77,6 +77,9 @@ func readList(file string) ([]string, error) {
 // forward, a leading slash removed with a warning the first time.
 func (c *creator) add(dir, name string) error {
 	archiveName := c.archiveName(name)
+	if excluded(c.opts.excludes, archiveName) {
+		return nil
+	}
 
 	// An absolute member is where it says, whatever -C is in force.
 	fsPath := name
@@ -96,9 +99,18 @@ func (c *creator) add(dir, name string) error {
 
 // archiveName turns a command-line name into the member name: forward
 // slashes, no leading slash, no trailing slash (the directory entry adds its
-// own), "." kept as given so a tree archived as "." is "./…".
+// own), "." kept as given so a tree archived as "." is "./…". Under -P the
+// name is kept as given, its leading slash and ".." included.
 func (c *creator) archiveName(name string) string {
 	archiveName := filepath.ToSlash(name)
+
+	if c.opts.absoluteNames {
+		if trimmed := strings.TrimSuffix(archiveName, "/"); trimmed != "" {
+			return trimmed
+		}
+
+		return archiveName
+	}
 
 	if strings.HasPrefix(archiveName, "/") {
 		if !c.warnedLeadingSlash {
@@ -202,6 +214,9 @@ func (c *creator) addChildren(fsPath, archiveName string) error {
 		// Not path.Join: it would clean "./sub" to "sub", and the names are
 		// kept as the member was given.
 		childName := archiveName + "/" + entry.Name()
+		if excluded(c.opts.excludes, childName) {
+			continue
+		}
 
 		info, err := os.Lstat(childPath)
 		if err != nil {

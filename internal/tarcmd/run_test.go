@@ -493,6 +493,8 @@ func TestUsage(t *testing.T) {
 		{[]string{"-cf", "a", "--mtime=yesterday", "y"}, "Invalid mtime"},
 		{[]string{"-cf", "a", "--owner=nosuchuser-for-sure", "y"}, "Invalid owner or group"},
 		{[]string{"-xf", "a", "member"}, "subset of members is not supported"},
+		{[]string{"-cf", "a", "-I"}, "option requires an argument -- 'I'"},
+		{[]string{"-cf", "a", "--use-compress-program=", "y"}, "requires a program"},
 	} {
 		status, _, stderr := run(t, nil, tc.args...)
 		if status != tarcmd.ExitUsage || !strings.Contains(stderr, tc.want) {
@@ -842,5 +844,196 @@ func TestLargeFile(t *testing.T) {
 
 	if got := readFile(t, filepath.Join(dst, "big")); got != want {
 		t.Errorf("%d bytes back, want %d", len(got), len(want))
+	}
+}
+
+// TestActionsCache: the commands actions/cache runs on Linux and macOS, GNU
+// tar's grammar. Its manifest names the cached paths relative to the
+// workspace, so a path outside it is "../…"; -P keeps those names and the
+// absolute ones, and extraction puts every path back where it was.
+func TestActionsCache(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("actions/cache runs Windows' own tar.exe on Windows, never this one")
+	}
+
+	top := t.TempDir()
+	workspace := filepath.Join(top, "work", "repo", "repo")
+	outside := filepath.Join(top, "home", ".cache", "go-build")
+	absolute := filepath.Join(top, "go", "pkg", "mod")
+	inside := filepath.Join(workspace, ".build", "cache")
+
+	for _, dir := range []string{outside, absolute, inside} {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		writeFile(t, filepath.Join(dir, "entry"), dir, 0o644)
+	}
+
+	relative, err := filepath.Rel(workspace, outside)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	scratch := t.TempDir()
+	manifest := filepath.Join(scratch, "manifest.txt")
+	writeFile(t, manifest, relative+"\n.build/cache\n"+absolute+"\n", 0o644)
+
+	archive := filepath.Join(scratch, "cache.tzst")
+
+	mustRun(t, nil, "--posix", "-cf", archive, "--exclude", archive, "-P", "-C", workspace,
+		"--files-from", manifest, "--use-compress-program", "zstdmt")
+
+	if head := readFile(t, archive); !strings.HasPrefix(head, "\x28\xb5\x2f\xfd") {
+		t.Fatalf("zstdmt: the archive is not a zstd stream: % x", head[:4])
+	}
+
+	listing, _ := mustRun(t, nil, "-tf", archive, "-P", "--use-compress-program", "unzstd")
+	for _, want := range []string{
+		filepath.ToSlash(relative) + "/entry",
+		".build/cache/entry",
+		filepath.ToSlash(absolute) + "/entry",
+	} {
+		if !strings.Contains(listing, want+"\n") {
+			t.Errorf("listing lacks %q:\n%s", want, listing)
+		}
+	}
+
+	for _, dir := range []string{outside, absolute, inside} {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	mustRun(t, nil, "-xf", archive, "-P", "-C", workspace, "--use-compress-program", "unzstd",
+		"--delay-directory-restore")
+
+	for _, dir := range []string{outside, absolute, inside} {
+		if got := readFile(t, filepath.Join(dir, "entry")); got != dir {
+			t.Errorf("%s/entry: %q", dir, got)
+		}
+	}
+
+	t.Run("GNU tar", func(t *testing.T) {
+		t.Parallel()
+
+		system := reference.Find(t, "tar", "--version")
+
+		version, err := exec.Command(system, "--version").Output()
+		if err != nil || !strings.Contains(string(version), "GNU tar") {
+			t.Skip("the tar on PATH is not GNU tar, the one actions/cache runs on Linux")
+		}
+
+		for _, program := range []string{"zstdmt", "unzstd"} {
+			if _, err := exec.LookPath(program); err != nil {
+				t.Skipf("%s not on PATH", program)
+			}
+		}
+
+		dst := filepath.Join(t.TempDir(), "work")
+		if err := os.MkdirAll(dst, 0o755); err != nil {
+			t.Fatal(err)
+		}
+
+		mine := filepath.Join(t.TempDir(), "mine.tzst")
+		mustRun(t, nil, "--posix", "-cf", mine, "-C", workspace, "--use-compress-program", "zstdmt", ".build")
+
+		if out, err := exec.Command(system, "-xf", mine, "-P", "-C", dst, "--use-compress-program", "unzstd").
+			CombinedOutput(); err != nil {
+			t.Fatalf("GNU tar reads ours: %v\n%s", err, out)
+		}
+
+		if got := readFile(t, filepath.Join(dst, ".build", "cache", "entry")); got != inside {
+			t.Errorf("GNU tar extracted %q", got)
+		}
+
+		theirs := filepath.Join(t.TempDir(), "theirs.tzst")
+		if out, err := exec.Command(system, "--posix", "-cf", theirs, "-P", "-C", workspace,
+			"--use-compress-program", "zstdmt", ".build").CombinedOutput(); err != nil {
+			t.Fatalf("GNU tar: %v\n%s", err, out)
+		}
+
+		back := t.TempDir()
+		mustRun(t, nil, "-xf", theirs, "-P", "-C", back, "--use-compress-program", "unzstd")
+
+		if got := readFile(t, filepath.Join(back, ".build", "cache", "entry")); got != inside {
+			t.Errorf("ours extracted %q", got)
+		}
+	})
+}
+
+// TestExclude: GNU's unanchored --exclude, on create and on extract; a
+// pattern naming a directory excludes what is under it.
+func TestExclude(t *testing.T) {
+	t.Parallel()
+
+	src := tree(t)
+
+	archive, _ := mustRun(t, nil, "-cf", "-", "-C", src, "--exclude", "*.bin", "--exclude", "empty", ".")
+	for _, name := range names(t, []byte(archive)) {
+		if strings.HasSuffix(name, ".bin") || strings.Contains(name, "empty") {
+			t.Errorf("create kept %q", name)
+		}
+	}
+
+	full, _ := mustRun(t, nil, "-cf", "-", "-C", src, ".")
+
+	dst := t.TempDir()
+	mustRun(t, []byte(full), "-xf", "-", "-C", dst, "--exclude=sub")
+
+	if _, err := os.Stat(filepath.Join(dst, "sub")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("extract kept sub: %v", err)
+	}
+
+	if got := readFile(t, filepath.Join(dst, "hello.txt")); got != "hello\n" {
+		t.Errorf("hello.txt: %q", got)
+	}
+}
+
+// TestPosix: --posix is --format=posix.
+func TestPosix(t *testing.T) {
+	t.Parallel()
+
+	src := tree(t)
+	fixed := []string{"-C", src, "--sort=name", "--mtime=@0", "--owner=0", "--group=0", "--numeric-owner", "."}
+
+	posix, _ := mustRun(t, nil, append([]string{"-cf", "-", "--posix"}, fixed...)...)
+	format, _ := mustRun(t, nil, append([]string{"-cf", "-", "--format=posix"}, fixed...)...)
+
+	if posix != format {
+		t.Error("--posix and --format=posix wrote different archives")
+	}
+}
+
+// TestCompressProgram: a program the command does not know is a filter it
+// runs, with -d to read, and its failure is the command's.
+func TestCompressProgram(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("the filter is a shell script")
+	}
+
+	filter := filepath.Join(t.TempDir(), "passthrough")
+	writeFile(t, filter, "#!/bin/sh\nif [ \"$1\" = -d ]; then shift; fi\nexec cat\n", 0o755)
+
+	src := tree(t)
+	archive := filepath.Join(t.TempDir(), "through.tar")
+
+	mustRun(t, nil, "-cf", archive, "-I", filter, "-C", src, ".")
+
+	if got := names(t, []byte(readFile(t, archive))); !slices.Contains(got, "./hello.txt") {
+		t.Fatalf("the filter's output is not the archive: %v", got)
+	}
+
+	dst := t.TempDir()
+	mustRun(t, nil, "-xf", archive, "--use-compress-program="+filter, "-C", dst)
+	assertTree(t, dst)
+
+	status, _, stderr := run(t, nil, "-cf", filepath.Join(t.TempDir(), "x.tar"), "-I", "false", "-C", src, ".")
+	if status != tarcmd.ExitError || !strings.Contains(stderr, "Child returned status 1") {
+		t.Errorf("a failing filter: exit %d, %q", status, stderr)
 	}
 }

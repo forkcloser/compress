@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 )
 
 // Exit statuses, GNU tar's.
@@ -31,6 +32,8 @@ Common options:
       --strip-components=N   strip N leading components from file names on extraction
       --no-recursion         avoid descending automatically in directories
       --sort=ORDER           directory sorting order: none (default) or name
+      --exclude=PATTERN      exclude files matching PATTERN, a wildcard
+  -P, --absolute-names       don't strip leading '/'s or refuse '..' in file names
 
 Compression:
   -a, --auto-compress        use archive suffix to determine the compression program
@@ -39,9 +42,14 @@ Compression:
   -z, --gzip                 filter the archive through gzip
       --zstd                 filter the archive through zstd
       --lz4                  filter the archive through lz4
+  -I, --use-compress-program=PROG
+                             filter through PROG (must accept -d); a known
+                             compressor (zstd, zstdmt, unzstd, gzip, xz, ...)
+                             is its built-in codec
 
 Attributes:
       --format=FORMAT        archive format: ustar, posix (pax) or gnu
+      --posix                same as --format=posix
       --group=NAME[:GID]     force NAME as group for added files
       --owner=NAME[:UID]     force NAME as owner for added files
       --mtime=DATE           set mtime for added files from DATE
@@ -137,7 +145,7 @@ func create(opts *options, stdout, stderr io.Writer) (bool, error) {
 		file, out, verbose = created, created, stdout
 	}
 
-	compressor, err := openWriter(createWrap(opts), out)
+	compressor, err := openWriter(createWrap(opts), opts.program, out)
 	if err != nil {
 		return false, err
 	}
@@ -184,7 +192,7 @@ func openArchive(opts *options, stdin io.Reader) (io.ReadCloser, func(), error) 
 		release = func() { _ = file.Close() } // read-only: a close error carries nothing
 	}
 
-	reader, err := openReader(opts.compression, source)
+	reader, err := openReader(opts.compression, opts.program, source)
 	if err != nil {
 		release()
 
@@ -202,14 +210,19 @@ func extract(opts *options, stdin io.Reader, stdout, stderr io.Writer) (bool, er
 
 	defer release()
 
-	root, err := os.OpenRoot(opts.dir)
+	rootDir, base, err := extractionRoot(opts)
 	if err != nil {
-		return false, fmt.Errorf("%s: Cannot open: %w", opts.dir, errReason(err))
+		return false, err
+	}
+
+	root, err := os.OpenRoot(rootDir)
+	if err != nil {
+		return false, fmt.Errorf("%s: Cannot open: %w", rootDir, errReason(err))
 	}
 
 	defer func() { _ = root.Close() }() // a directory handle: a close error carries nothing
 
-	unpacker := &extractor{opts: opts, root: root, stdout: stdout, stderr: stderr}
+	unpacker := &extractor{opts: opts, root: root, base: base, stdout: stdout, stderr: stderr}
 
 	if err := unpacker.extract(tar.NewReader(reader)); err != nil {
 		return unpacker.failed, err
@@ -220,6 +233,22 @@ func extract(opts *options, stdin io.Reader, stdout, stderr io.Writer) (bool, er
 	}
 
 	return unpacker.failed, nil
+}
+
+// extractionRoot is the directory extraction is confined to: -C's, or under
+// -P the file system root of -C's volume, the names then resolved against
+// -C's absolute path (the second result).
+func extractionRoot(opts *options) (rootDir, base string, err error) {
+	if !opts.absoluteNames {
+		return opts.dir, "", nil
+	}
+
+	base, err = filepath.Abs(opts.dir)
+	if err != nil {
+		return "", "", fmt.Errorf("%s: Cannot open: %w", opts.dir, errReason(err))
+	}
+
+	return filepath.VolumeName(base) + string(filepath.Separator), base, nil
 }
 
 func list(opts *options, stdin io.Reader, stdout io.Writer) error {

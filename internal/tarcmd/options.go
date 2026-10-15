@@ -33,6 +33,9 @@ const (
 	compressBzip2
 	compressZstd
 	compressLz4
+	// compressProgram is an --use-compress-program the command does not
+	// know: the archive is filtered through it, as GNU tar does.
+	compressProgram
 )
 
 // member is a name given on the command line or read from a -T list, with
@@ -67,6 +70,9 @@ type options struct {
 	mtime           *time.Time
 	sortNames       bool
 	noRecursion     bool
+	absoluteNames   bool     // -P: names keep their leading slash and their ".."
+	excludes        []string // --exclude patterns
+	program         string   // --use-compress-program, when not a known compressor
 	dir             string   // the last -C, for extract and list
 	members         []member // in order, for create
 	help            bool
@@ -87,7 +93,7 @@ func usage(format string, args ...any) error {
 }
 
 // takesArgument are the short options that consume a value.
-const takesArgument = "fCT"
+const takesArgument = "fCTI"
 
 // parse reads args (without the command name) into options. Besides a
 // usageError, it returns no error.
@@ -201,6 +207,8 @@ func (o *options) short(letter rune) error {
 		o.samePermissions = true
 	case 'm':
 		o.touch = true
+	case 'P':
+		o.absoluteNames = true
 	case 'h':
 		return usage("option -h (--dereference) is not supported")
 	case 'O':
@@ -220,6 +228,8 @@ func (o *options) shortWithValue(letter rune, value string) error {
 		o.changeDir(value)
 	case 'T':
 		o.members = append(o.members, member{dir: o.dir, list: value})
+	case 'I':
+		return o.setCompressProgram(value)
 	default:
 		return usage("invalid option -- '%c'", letter)
 	}
@@ -291,27 +301,66 @@ func longFlags() map[string]func(*options) error {
 		"numeric-owner":        setFlag(func(opts *options) { opts.numericOwner = true }),
 		"no-recursion":         setFlag(func(opts *options) { opts.noRecursion = true }),
 		"recursion":            setFlag(func(opts *options) { opts.noRecursion = false }),
-		"help":                 setFlag(func(opts *options) { opts.help = true }),
-		"version":              setFlag(func(opts *options) { opts.version = true }),
+		"absolute-names":       setFlag(func(opts *options) { opts.absoluteNames = true }),
+		"posix":                setFlag(func(opts *options) { opts.format = tar.FormatPAX }),
+		// Directory modes and times are always applied last, so the delay
+		// is what extraction already does; there are no remote archives,
+		// so a colon in a name is always local.
+		"delay-directory-restore":    setFlag(func(*options) {}),
+		"no-delay-directory-restore": setFlag(func(*options) {}),
+		"force-local":                setFlag(func(*options) {}),
+		"help":                       setFlag(func(opts *options) { opts.help = true }),
+		"version":                    setFlag(func(opts *options) { opts.version = true }),
 	}
 }
 
 func longWithValue() map[string]func(*options, string) error {
 	return map[string]func(*options, string) error{
-		"file":             func(opts *options, value string) error { opts.archive = value; return nil },
-		"directory":        func(opts *options, value string) error { opts.changeDir(value); return nil },
-		"files-from":       (*options).addList,
-		"strip-components": (*options).setStripComponents,
-		"format":           (*options).setFormat,
-		"owner":            (*options).setOwner,
-		"group":            (*options).setGroup,
-		"mtime":            (*options).setMtime,
-		"sort":             (*options).setSort,
+		"file":                 func(opts *options, value string) error { opts.archive = value; return nil },
+		"directory":            func(opts *options, value string) error { opts.changeDir(value); return nil },
+		"files-from":           (*options).addList,
+		"strip-components":     (*options).setStripComponents,
+		"format":               (*options).setFormat,
+		"owner":                (*options).setOwner,
+		"group":                (*options).setGroup,
+		"mtime":                (*options).setMtime,
+		"sort":                 (*options).setSort,
+		"exclude":              (*options).addExclude,
+		"use-compress-program": (*options).setCompressProgram,
 	}
 }
 
 func (o *options) addList(file string) error {
 	o.members = append(o.members, member{dir: o.dir, list: file})
+
+	return nil
+}
+
+func (o *options) addExclude(pattern string) error {
+	o.excludes = append(o.excludes, pattern)
+
+	return nil
+}
+
+// setCompressProgram is --use-compress-program: a compressor the command
+// knows by name (zstd, zstdmt, unzstd, gzip, xz, …) is its own codec, its
+// arguments being tuning that changes nothing in the stream; any other
+// program is run as a filter.
+func (o *options) setCompressProgram(program string) error {
+	fields := strings.Fields(program)
+	if len(fields) == 0 {
+		return usage("option '--use-compress-program' requires a program")
+	}
+
+	if known, ok := knownProgram(fields[0]); ok {
+		o.compression = known
+		o.program = ""
+
+		return nil
+	}
+
+	o.compression = compressProgram
+	o.program = program
 
 	return nil
 }
