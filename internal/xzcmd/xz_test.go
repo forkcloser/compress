@@ -20,6 +20,7 @@ import (
 	"github.com/forkcloser/xz"
 
 	"github.com/forkcloser/compress/internal/filecodec"
+	"github.com/forkcloser/compress/internal/reference"
 	"github.com/forkcloser/compress/internal/xzcmd"
 )
 
@@ -230,14 +231,12 @@ func TestRefusals(t *testing.T) {
 	}
 }
 
-// TestInterop: streams exchanged with the xz on PATH, when there is one.
+// TestInterop: streams exchanged with the xz on PATH that is not ours, when
+// there is one.
 func TestInterop(t *testing.T) {
 	t.Parallel()
 
-	system, err := exec.LookPath("xz")
-	if err != nil {
-		t.Skip("no xz on PATH")
-	}
+	system := reference.Find(t, "xz", "-V")
 
 	ours := mustRun(t, "xz", []byte(payload))
 

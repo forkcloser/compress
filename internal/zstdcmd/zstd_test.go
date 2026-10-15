@@ -19,6 +19,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 
 	"github.com/forkcloser/compress/internal/filecodec"
+	"github.com/forkcloser/compress/internal/reference"
 	"github.com/forkcloser/compress/internal/zstdcmd"
 )
 
@@ -233,14 +234,12 @@ func TestRefusals(t *testing.T) {
 	}
 }
 
-// TestInterop: streams exchanged with the zstd on PATH, when there is one.
+// TestInterop: streams exchanged with the zstd on PATH that is not ours, when
+// there is one.
 func TestInterop(t *testing.T) {
 	t.Parallel()
 
-	system, err := exec.LookPath("zstd")
-	if err != nil {
-		t.Skip("no zstd on PATH")
-	}
+	system := reference.Find(t, "zstd", "-V")
 
 	ours := mustRun(t, "zstd", []byte(payload), "-19")
 

@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/forkcloser/compress/internal/reference"
 	"github.com/forkcloser/compress/internal/unzipcmd"
 	"github.com/forkcloser/compress/internal/zipcmd"
 )
@@ -392,10 +393,7 @@ func TestRefusals(t *testing.T) {
 func TestInterop(t *testing.T) {
 	tree(t)
 
-	theirUnzip, err := exec.LookPath("unzip")
-	if err != nil {
-		t.Skip("no unzip on PATH")
-	}
+	theirUnzip := reference.Find(t, "unzip", "-v")
 
 	mustRun(t, "", "-qr", "ours.zip", "d")
 
@@ -403,10 +401,7 @@ func TestInterop(t *testing.T) {
 		t.Errorf("%s -t: %v\n%s", theirUnzip, testErr, out)
 	}
 
-	theirZip, err := exec.LookPath("zip")
-	if err != nil {
-		t.Skip("no zip on PATH")
-	}
+	theirZip := reference.Find(t, "zip", "-v")
 
 	if out, zipErr := exec.Command(theirZip, "-qr", "theirs.zip", "d").CombinedOutput(); zipErr != nil {
 		t.Fatalf("%s: %v\n%s", theirZip, zipErr, out)
