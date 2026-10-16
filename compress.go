@@ -37,11 +37,18 @@ const inputBufSize = 256 * constants.KiB
 // Decompressor creates a decompressed reader from a compressed stream.
 type Decompressor func(io.Reader) (io.ReadCloser, error)
 
+// SeekableDecompressor creates a decompressed reader from a compressed file
+// of a known size that can be read at any offset: a format whose layout
+// rewards that (an index at the end, independent blocks) decodes it in
+// parallel.
+type SeekableDecompressor func(io.ReaderAt, int64) (io.ReadCloser, error)
+
 // format is a registered decompression format.
 type format struct {
 	name  string
 	magic []byte
 	new   Decompressor
+	newAt SeekableDecompressor // nil when seekability buys the format nothing
 }
 
 //nolint:gochecknoglobals // the format registry is process-wide by design
@@ -54,10 +61,17 @@ var (
 // Register makes a decompression format available to Decompress.
 // It is typically called from an init function in format-specific sub-packages.
 func Register(name string, magic []byte, fn Decompressor) {
+	RegisterSeekable(name, magic, fn, nil)
+}
+
+// RegisterSeekable is Register for a format that also decodes a seekable
+// input of known size through at, which Decompress takes on its own when
+// the input offers it; a nil at is Register.
+func RegisterSeekable(name string, magic []byte, fn Decompressor, at SeekableDecompressor) {
 	formatsMu.Lock()
 	defer formatsMu.Unlock()
 
-	formats = append(formats, format{name: name, magic: magic, new: fn})
+	formats = append(formats, format{name: name, magic: magic, new: fn, newAt: at})
 
 	if len(magic) > peekSize {
 		peekSize = len(magic)
@@ -137,6 +151,15 @@ func (c *compressed) Close() error {
 // decoder refuses or that ends early, here or on a later Read; a source that
 // fails, here or later, is ErrSource. The caller must close the returned
 // ReadCloser to release decoder resources; a Read after that is ErrClosed.
+//
+// An input that is both an io.ReaderAt and an io.Seeker (an *os.File, a
+// *bytes.Reader, an *io.SectionReader) is decoded from its current offset to
+// its end, and a format registered with a seekable decoder (xz, whose block
+// index sits at the end) decodes it in parallel, the way io.Copy takes a
+// faster path when the operands offer one. The input's offset is left where
+// it was; its bytes are read at offsets, never through Read. A size the
+// input misreports shows up as the stream cut short or as a failure of the
+// input, ErrCorrupt or ErrSource.
 func Decompress(reader io.Reader) (io.ReadCloser, error) {
 	formatsMu.RLock()
 
@@ -147,6 +170,18 @@ func Decompress(reader io.Reader) (io.ReadCloser, error) {
 
 	if peek == 0 {
 		return nil, fmt.Errorf("%w: no decompression format registered", ErrUnknownFormat)
+	}
+
+	ext, ok, err := seekable(reader)
+	if err != nil {
+		return nil, err
+	}
+
+	if ok {
+		decoder, atErr := decompressSeekable(fmts, peek, ext)
+		if !errors.Is(atErr, errStreamPath) {
+			return decoder, atErr
+		}
 	}
 
 	// Buffer the input to batch syscalls for decompressors that make many small reads.
@@ -174,4 +209,95 @@ func Decompress(reader io.Reader) (io.ReadCloser, error) {
 	}
 
 	return nil, fmt.Errorf("%w (header: %x)", ErrUnknownFormat, header)
+}
+
+// errStreamPath says a seekable input is the stream path's after all: its
+// format has no seekable decoder, or no format opens it, and the stream
+// path serves or reports it as it does any input.
+var errStreamPath = errors.New("the stream path's")
+
+// decompressSeekable is Decompress over a seekable input: the magic read at
+// the offset, the format's seekable decoder over the extent, or errStreamPath.
+func decompressSeekable(fmts []format, peek int, ext extent) (io.ReadCloser, error) {
+	header, err := headerAt(ext, peek)
+	if err != nil {
+		return nil, err
+	}
+
+	f, ok := seekableFormat(fmts, header)
+	if !ok {
+		return nil, errStreamPath
+	}
+
+	return codec.ReaderAt(f.newAt, io.NewSectionReader(ext.readerAt, ext.offset, ext.size), ext.size)
+}
+
+// extent is a seekable input: readable at offsets, from offset for size
+// bytes.
+type extent struct {
+	readerAt io.ReaderAt
+	offset   int64
+	size     int64
+}
+
+// seekable reports whether reader can be read at offsets with a known
+// extent, and that extent: from its current offset to its end. A Seek that
+// fails before the offset moved leaves the reader where it was, and the
+// stream path takes it; one that fails to restore the offset after the end
+// was measured leaves the reader at its end, with nothing for the stream
+// path to read, and is ErrSource.
+func seekable(reader io.Reader) (extent, bool, error) {
+	readerAt, isAt := reader.(io.ReaderAt)
+
+	seeker, isSeeker := reader.(io.Seeker)
+	if !isAt || !isSeeker {
+		return extent{}, false, nil
+	}
+
+	offset, err := seeker.Seek(0, io.SeekCurrent)
+	if err != nil {
+		return extent{}, false, nil //nolint:nilerr // the offset did not move: not seekable after all, the stream path's
+	}
+
+	end, err := seeker.Seek(0, io.SeekEnd)
+	if err != nil {
+		return extent{}, false, nil //nolint:nilerr // likewise: a Seek to the end that fails leaves the offset in place
+	}
+
+	if _, err := seeker.Seek(offset, io.SeekStart); err != nil {
+		return extent{}, false, fmt.Errorf("%w: restoring the input's offset: %w", ErrSource, err)
+	}
+
+	if end < offset {
+		return extent{}, false, nil
+	}
+
+	return extent{readerAt: readerAt, offset: offset, size: end - offset}, true, nil
+}
+
+// headerAt is the first peek bytes of the extent, fewer when it is shorter;
+// a failing read is ErrSource.
+func headerAt(ext extent, peek int) ([]byte, error) {
+	header := make([]byte, min(int64(peek), ext.size))
+
+	n, err := ext.readerAt.ReadAt(header, ext.offset)
+	if err != nil && !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("%w: %w", ErrSource, err)
+	}
+
+	return header[:n], nil
+}
+
+// seekableFormat is the registered format whose magic opens header and that
+// decodes a seekable input, if there is one. A format the stream path knows
+// but this one does not, and an unknown header, are the stream path's to
+// serve or report.
+func seekableFormat(fmts []format, header []byte) (format, bool) {
+	for _, f := range fmts {
+		if f.newAt != nil && bytes.HasPrefix(header, f.magic) {
+			return f, true
+		}
+	}
+
+	return format{}, false
 }

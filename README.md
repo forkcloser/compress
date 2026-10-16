@@ -27,7 +27,9 @@ reader, err := compress.Decompress(stream) // the format from its magic bytes
 writer, err := gzip.NewWriter(file)        // tar.NewWriter(writer) builds a .tar.gz
 ```
 
-`Compress` is the zstd encoder, `Decompress` picks the decoder by magic,
+`Compress` is the zstd encoder, `Decompress` picks the decoder by magic (an
+`*os.File` or `*bytes.Reader` of xz is decoded in parallel from its block
+index, its offset left where it was),
 `ReadAhead` runs a serial decoder a few blocks ahead of a slow consumer,
 `Tar` archives an `fs.FS` as `archive/tar` writes a tree, and `Untar`
 extracts into an `*os.Root`, which holds every entry inside its directory at

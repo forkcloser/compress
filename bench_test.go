@@ -74,3 +74,33 @@ func BenchmarkCompress(b *testing.B) {
 		_ = reader.Close()
 	}
 }
+
+// BenchmarkDecompressXz: the same multi-block xz through the stream path and
+// the seekable one, the before and after of taking the parallel decoder on a
+// seekable input.
+func BenchmarkDecompressXz(b *testing.B) {
+	want := payload(64 * constants.MiB)
+	data := xzBlocks(b, want, constants.MiB)
+
+	for name, input := range map[string]func() io.Reader{
+		"stream":   func() io.Reader { return streamOnly{bytes.NewReader(data)} },
+		"seekable": func() io.Reader { return bytes.NewReader(data) },
+	} {
+		b.Run(name, func(b *testing.B) {
+			b.SetBytes(int64(len(want)))
+
+			for b.Loop() {
+				reader, err := compress.Decompress(input())
+				if err != nil {
+					b.Fatal(err)
+				}
+
+				if _, err := io.Copy(io.Discard, reader); err != nil {
+					b.Fatal(err)
+				}
+
+				_ = reader.Close()
+			}
+		})
+	}
+}
