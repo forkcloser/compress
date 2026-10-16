@@ -14,6 +14,8 @@ import (
 
 	"github.com/klauspost/compress/flate"
 
+	"github.com/forkcloser/xos"
+
 	"github.com/forkcloser/compress/internal/constants"
 )
 
@@ -174,12 +176,12 @@ func (c *creator) directory(entries []entry, dir string) []entry {
 		return c.add(entries, dir, info)
 	}
 
-	err := filepath.WalkDir(dir, func(fsPath string, _ fs.DirEntry, err error) error {
+	walk(dir, func(fsPath string, err error) {
 		if err != nil {
 			c.warnf("could not open for reading: %s", fsPath)
 			c.status = ExitInput
 
-			return nil //nolint:nilerr // reported; the walk goes on, as Info-ZIP's does
+			return
 		}
 
 		// Stat, not the entry's Lstat: a link is stored as its target, the
@@ -188,20 +190,40 @@ func (c *creator) directory(entries []entry, dir string) []entry {
 		if err != nil {
 			c.warnf("name not matched: %s", fsPath)
 
-			return nil //nolint:nilerr // reported; the walk goes on, as Info-ZIP's does
+			return
 		}
 
 		entries = c.add(entries, fsPath, info)
-
-		return nil
 	})
-	if err != nil {
-		// WalkDir's own failures are all reported through the callback.
-		c.warnf("could not open for reading: %s", dir)
-		c.status = ExitInput
-	}
 
 	return entries
+}
+
+// walk visits dir and everything under it in lexical order, a directory
+// before its entries, as filepath.WalkDir does; a directory that cannot be
+// read is visited again with the error and not descended. Not WalkDir: its
+// directory handles lack the share mode that lets another process rename or
+// remove what is being archived on Windows.
+func walk(dir string, visit func(fsPath string, err error)) {
+	visit(dir, nil)
+
+	entries, err := xos.ReadDir(dir)
+	if err != nil {
+		visit(dir, err)
+
+		return
+	}
+
+	for _, entry := range entries {
+		fsPath := filepath.Join(dir, entry.Name())
+		if entry.IsDir() {
+			walk(fsPath, visit)
+
+			continue
+		}
+
+		visit(fsPath, nil)
+	}
 }
 
 // add appends one input under its archive name, or skips it: a directory
@@ -248,7 +270,7 @@ func (c *creator) storedName(fsPath string, isDir bool) (string, bool) {
 // writeFile writes the archive beside its final name and moves it into
 // place, so a failure leaves whatever was there.
 func (c *creator) writeFile(target string, existing *zip.ReadCloser, entries []entry) int {
-	tmp, err := os.CreateTemp(filepath.Dir(target), "zi")
+	tmp, err := xos.CreateTemp(filepath.Dir(target), "zi")
 	if err != nil {
 		return c.errorf(ExitCreate, "Could not create output file (%v)", err)
 	}
@@ -275,7 +297,7 @@ func (c *creator) writeFile(target string, existing *zip.ReadCloser, entries []e
 		_ = existing.Close()
 	}
 
-	if err := os.Rename(tmp.Name(), target); err != nil {
+	if err := xos.Rename(tmp.Name(), target); err != nil {
 		return c.errorf(ExitCreate, "Could not create output file (%v)", err)
 	}
 
@@ -342,7 +364,7 @@ func (c *creator) store(writer *zip.Writer, item entry, verb string) {
 	if !item.info.IsDir() {
 		var err error
 
-		source, err = os.Open(item.path) // #nosec G304 -- the file is the command's own argument
+		source, err = xos.Open(item.path)
 		if err != nil {
 			c.warnf("could not open for reading: %s", item.path)
 			c.status = ExitInput

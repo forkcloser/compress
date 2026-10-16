@@ -25,6 +25,11 @@ golangci:
         - path: internal/zipcmd/run_test\.go
           linters:
             - paralleltest
+        # A test's fixtures are written and read with os: the share mode is
+        # the commands' concern, not a test's.
+        - path: _test\.go
+          linters:
+            - forbidigo
     settings:
       wrapcheck:
         # Errors from this module's own packages carry their context from
@@ -40,3 +45,14 @@ golangci:
               - github.com/klauspost/compress
               - github.com/forkcloser/xz
               - github.com/pierrec/lz4/v4
+              # The commands' file opens, with the share mode os lacks on Windows.
+              - github.com/forkcloser/xos
+      forbidigo:
+        forbid:
+          # The library sees readers and writers only, and a command opens a
+          # file through xos, whose handles let another process rename or
+          # remove the file on Windows (os.OpenRoot's do too, and stay).
+          - pattern: '^os\.(Open|OpenFile|Create|CreateTemp|ReadFile|WriteFile|ReadDir|Rename)$'
+            msg: "open files through github.com/forkcloser/xos; the library opens none"
+          - pattern: '^filepath\.WalkDir$'
+            msg: "walk with xos.ReadDir; WalkDir's directory handles lack the share mode"
