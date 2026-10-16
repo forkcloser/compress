@@ -26,7 +26,7 @@ import (
 
 //nolint:gochecknoinits // Registration pattern requires init.
 func init() {
-	compress.Register("xz", []byte{0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00}, codec.Xz)
+	compress.RegisterSeekable("xz", []byte{0xFD, 0x37, 0x7A, 0x58, 0x5A, 0x00}, codec.Xz, codec.XzAt)
 }
 
 // NewReader returns a reader that decompresses the xz stream r holds. Its

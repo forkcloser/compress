@@ -70,11 +70,16 @@ func (s *Source) Failure() error {
 // Classify names a decoder's error: ErrSource when the source failed under
 // it, ErrCorrupt otherwise; one already classed is left alone.
 func (s *Source) Classify(err error) error {
+	return classify(err, s.Failure())
+}
+
+// classify is Classify against a source's recorded failure, if any.
+func classify(err, src error) error {
 	if classed(err) {
 		return err
 	}
 
-	if src := s.Failure(); src != nil {
+	if src != nil {
 		if errors.Is(err, src) {
 			return fmt.Errorf("%w: %w", ErrSource, err)
 		}
@@ -98,6 +103,71 @@ func Reader(raw func(io.Reader) (io.ReadCloser, error), r io.Reader) (io.ReadClo
 	return NewReader(decoder, source), nil
 }
 
+// SourceAt is Source for a reader read at offsets, which a parallel decoder
+// does from several goroutines at once.
+type SourceAt struct {
+	reader io.ReaderAt
+
+	mu  sync.Mutex
+	err error
+}
+
+// TrackAt returns a SourceAt over reader.
+func TrackAt(reader io.ReaderAt) *SourceAt {
+	return &SourceAt{reader: reader}
+}
+
+// ReadAt reads from the source at off, remembering its first failure.
+func (s *SourceAt) ReadAt(p []byte, off int64) (int, error) {
+	n, err := s.reader.ReadAt(p, off)
+	if err != nil && !errors.Is(err, io.EOF) {
+		s.mu.Lock()
+
+		if s.err == nil {
+			s.err = err
+		}
+
+		s.mu.Unlock()
+	}
+
+	return n, err //nolint:wrapcheck // the source's own error, which the decoder above reports and Classify then names
+}
+
+// Failure is the source's first failure, or nil.
+func (s *SourceAt) Failure() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	return s.err
+}
+
+// Classify is Source.Classify.
+func (s *SourceAt) Classify(err error) error {
+	return classify(err, s.Failure())
+}
+
+// ReaderAt builds the format's seekable decoder over r, size bytes long, with
+// raw and returns it with its errors classed and Read after Close enforced.
+func ReaderAt(
+	raw func(io.ReaderAt, int64) (io.ReadCloser, error),
+	r io.ReaderAt,
+	size int64,
+) (io.ReadCloser, error) {
+	source := TrackAt(r)
+
+	decoder, err := raw(source, size)
+	if err != nil {
+		return nil, source.Classify(err)
+	}
+
+	return &reader{decoder: decoder, source: source}, nil
+}
+
+// classifier names a decoder's error against its source's failure.
+type classifier interface {
+	Classify(err error) error
+}
+
 // NewReader wraps a decoder built over source: its Read and Close errors are
 // classed against the source's failure, and a Read after Close is ErrClosed,
 // which the decoders answer three different ways on their own. Close may
@@ -109,7 +179,7 @@ func NewReader(decoder io.ReadCloser, source *Source) io.ReadCloser {
 
 type reader struct {
 	decoder io.ReadCloser
-	source  *Source
+	source  classifier
 	closed  atomic.Bool
 }
 

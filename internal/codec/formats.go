@@ -58,6 +58,18 @@ func Xz(r io.Reader) (io.ReadCloser, error) {
 	return ReadAhead(io.NopCloser(decoder)), nil
 }
 
+// XzAt is the xz decoder over a seekable input of known size: the block
+// index at the stream's end lets it decode blocks in parallel, so it reads
+// no further ahead of its consumer than it already does.
+func XzAt(r io.ReaderAt, size int64) (io.ReadCloser, error) {
+	decoder, err := uxz.NewParallelReader(r, size)
+	if err != nil {
+		return nil, fmt.Errorf("xz decoder: %w", err)
+	}
+
+	return decoder, nil
+}
+
 // XzWriter is the xz encoder.
 func XzWriter(w io.Writer) (io.WriteCloser, error) {
 	encoder, err := uxz.NewWriter(w)
