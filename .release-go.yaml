@@ -2,15 +2,15 @@
 # goreleaser — https://goreleaser.com — the tar, xz, gzip, zstd, zip and unzip
 # binaries.
 # Local dry-run: `just do release --local --dry-run` (no tag, no publish,
-# artifacts under build/). Real release: `just do release vX.Y.Z`.
+# artifacts under .build/). Real release: `just do release vX.Y.Z`.
 version: 2
 
 project_name: compress
 
-# Under build/ (covered by the canonical .gitignore), in a subdirectory of its
+# Under .build/ (covered by the canonical .gitignore), in a subdirectory of its
 # own: goreleaser --clean wipes its dist directory, and the dev builds the
-# other recipes put in build/ must survive a release run.
-dist: build/release
+# other recipes put in .build/ must survive a release run.
+dist: .build/release
 
 # Twin of the `release` recipe in .limen/just/build-go.just. CGO off,
 # categorically: it is what makes the whole target matrix buildable from one
