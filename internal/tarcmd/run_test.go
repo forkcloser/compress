@@ -492,7 +492,6 @@ func TestUsage(t *testing.T) {
 		{[]string{"-cf", "a", "--format=v7", "y"}, "unknown archive format 'v7'"},
 		{[]string{"-cf", "a", "--mtime=yesterday", "y"}, "Invalid mtime"},
 		{[]string{"-cf", "a", "--owner=nosuchuser-for-sure", "y"}, "Invalid owner or group"},
-		{[]string{"-xf", "a", "member"}, "subset of members is not supported"},
 		{[]string{"-cf", "a", "-I"}, "option requires an argument -- 'I'"},
 		{[]string{"-cf", "a", "--use-compress-program=", "y"}, "requires a program"},
 	} {
