@@ -74,7 +74,7 @@ type options struct {
 	excludes        []string // --exclude patterns
 	program         string   // --use-compress-program, when not a known compressor
 	dir             string   // the last -C, for extract and list
-	members         []member // in order, for create
+	members         []member // in order: what create archives, what extract and list take
 	help            bool
 	version         bool
 }
@@ -468,10 +468,6 @@ func (o *options) finish() (*options, error) {
 
 	if o.mode == modeNone {
 		return nil, usage("You must specify one of the '-Acdtrux', '--delete' or '--test-label' options")
-	}
-
-	if o.mode != modeCreate && len(o.members) > 0 {
-		return nil, usage("extracting or listing a subset of members is not supported")
 	}
 
 	if o.mode == modeCreate && len(o.members) == 0 {

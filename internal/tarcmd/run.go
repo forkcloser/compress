@@ -97,7 +97,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, version strin
 	case modeExtract:
 		failed, err = extract(opts, stdin, stdout, stderr)
 	case modeList:
-		err = list(opts, stdin, stdout)
+		failed, err = list(opts, stdin, stdout, stderr)
 	case modeNone:
 	}
 
@@ -205,6 +205,11 @@ func openArchive(opts *options, stdin io.Reader) (io.ReadCloser, func(), error) 
 }
 
 func extract(opts *options, stdin io.Reader, stdout, stderr io.Writer) (bool, error) {
+	members, err := newSelection(opts.members)
+	if err != nil {
+		return false, err
+	}
+
 	reader, release, err := openArchive(opts, stdin)
 	if err != nil {
 		return false, err
@@ -224,7 +229,7 @@ func extract(opts *options, stdin io.Reader, stdout, stderr io.Writer) (bool, er
 
 	defer func() { _ = root.Close() }() // a directory handle: a close error carries nothing
 
-	unpacker := &extractor{opts: opts, root: root, base: base, stdout: stdout, stderr: stderr}
+	unpacker := &extractor{opts: opts, members: members, root: root, base: base, stdout: stdout, stderr: stderr}
 
 	if err := unpacker.extract(tar.NewReader(reader)); err != nil {
 		return unpacker.failed, err
@@ -253,23 +258,28 @@ func extractionRoot(opts *options) (rootDir, base string, err error) {
 	return filepath.VolumeName(base) + string(filepath.Separator), base, nil
 }
 
-func list(opts *options, stdin io.Reader, stdout io.Writer) error {
+func list(opts *options, stdin io.Reader, stdout, stderr io.Writer) (bool, error) {
+	members, err := newSelection(opts.members)
+	if err != nil {
+		return false, err
+	}
+
 	reader, release, err := openArchive(opts, stdin)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	defer release()
 
-	printer := &lister{opts: opts, stdout: stdout}
+	printer := &lister{opts: opts, members: members, stdout: stdout, stderr: stderr}
 
 	if err := printer.list(tar.NewReader(reader)); err != nil {
-		return err
+		return printer.failed, err
 	}
 
 	if err := reader.Close(); err != nil && !errors.Is(err, io.EOF) {
-		return fmt.Errorf("%s: %w", opts.archive, err)
+		return printer.failed, fmt.Errorf("%s: %w", opts.archive, err)
 	}
 
-	return nil
+	return printer.failed, nil
 }

@@ -14,9 +14,12 @@ const ugsWidth = 18
 
 // lister prints an archive's entries, names only or the long form of -tv.
 type lister struct {
-	opts   *options
-	stdout io.Writer
-	width  int
+	opts    *options
+	members *selection
+	stdout  io.Writer
+	stderr  io.Writer
+	width   int
+	failed  bool
 }
 
 func (l *lister) list(reader *tar.Reader) error {
@@ -25,14 +28,14 @@ func (l *lister) list(reader *tar.Reader) error {
 	for {
 		header, err := reader.Next()
 		if errors.Is(err, io.EOF) {
-			return nil
+			break
 		}
 
 		if err != nil {
 			return fmt.Errorf("Unexpected EOF in archive: %w", err)
 		}
 
-		if header.Typeflag == tar.TypeXGlobalHeader {
+		if header.Typeflag == tar.TypeXGlobalHeader || !l.members.take(header.Name) {
 			continue
 		}
 
@@ -42,6 +45,14 @@ func (l *lister) list(reader *tar.Reader) error {
 			fmt.Fprintln(l.stdout, header.Name)
 		}
 	}
+
+	for _, name := range l.members.missing() {
+		l.failed = true
+
+		fmt.Fprintf(l.stderr, "tar: %s: Not found in archive\n", name)
+	}
+
+	return nil
 }
 
 // long prints one entry as -tv does: mode, user/group, size, date, name,

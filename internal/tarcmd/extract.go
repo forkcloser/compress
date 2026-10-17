@@ -33,7 +33,8 @@ var (
 // extractor writes an archive's entries under one directory, through an
 // os.Root so that no entry, however named, lands or links outside it.
 type extractor struct {
-	opts *options
+	opts    *options
+	members *selection
 	// root is -C's directory, or under -P the file system root of -C's
 	// volume, with base -C's absolute path: -P names are where they say.
 	root   *os.Root
@@ -83,6 +84,10 @@ func (e *extractor) extract(reader *tar.Reader) error {
 		e.entry(reader, header)
 	}
 
+	for _, name := range e.members.missing() {
+		e.reportf("%s: Not found in archive", name)
+	}
+
 	e.finishDirs()
 
 	return nil
@@ -94,7 +99,7 @@ func (e *extractor) entry(reader *tar.Reader, header *tar.Header) {
 		return
 	}
 
-	if excluded(e.opts.excludes, header.Name) {
+	if !e.members.take(header.Name) || excluded(e.opts.excludes, header.Name) {
 		return
 	}
 
