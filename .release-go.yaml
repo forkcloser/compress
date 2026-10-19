@@ -15,7 +15,7 @@ dist: build/release
 # Twin of the `release` recipe in .limen/just/build-go.just. CGO off,
 # categorically: it is what makes the whole target matrix buildable from one
 # laptop. The commands share one set of flags; each stamps its own
-# main.version. Exactly the platforms .aqua/aqua.yaml lists under
+# main.version. Exactly the platforms .hermetic/hermetic.yaml lists under
 # checksum.supported_envs.
 builds:
   - id: tar
