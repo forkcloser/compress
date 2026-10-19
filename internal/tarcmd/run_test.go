@@ -483,6 +483,10 @@ func TestUsage(t *testing.T) {
 		want string
 	}{
 		{[]string{"-cf", "a.tar", "--bogus"}, "unrecognized option '--bogus'"},
+		{[]string{"-cf", "a.tar", "--strp", "y"}, "unrecognized option '--strp'"},
+		{[]string{"-cf", "a.tar", "--ver", "y"}, "option '--ver' is ambiguous; possibilities: '--verbose' '--version'"},
+		{[]string{"-cf", "a.tar", "--same", "y"}, "option '--same' is ambiguous; possibilities: '--same-owner' '--same-permissions'"},
+		{[]string{"-cf", "a.tar", "--=x", "y"}, "unrecognized option '--=x'"},
 		{[]string{"-q"}, "invalid option -- 'q'"},
 		{[]string{"-cf"}, "option requires an argument -- 'f'"},
 		{[]string{"-c"}, "Cowardly refusing to create an empty archive"},
@@ -1034,5 +1038,36 @@ func TestCompressProgram(t *testing.T) {
 	status, _, stderr := run(t, nil, "-cf", filepath.Join(t.TempDir(), "x.tar"), "-I", "false", "-C", src, ".")
 	if status != tarcmd.ExitError || !strings.Contains(stderr, "Child returned status 1") {
 		t.Errorf("a failing filter: exit %d, %q", status, stderr)
+	}
+}
+
+// TestLongOptionAbbreviation: a long option may be given as any unambiguous
+// prefix of its name, as getopt_long takes it for GNU tar and as bsdtar
+// takes it, with or without its value after '='; a whole name wins over
+// the options it is a prefix of, which is --file against --files-from, the
+// one such pair in the tables, each taken as itself. farcloser/tarmac's
+// init piped a tarball into "tar xz --strip 1" and was refused.
+func TestLongOptionAbbreviation(t *testing.T) {
+	t.Parallel()
+
+	src := tree(t)
+	list := filepath.Join(t.TempDir(), "list")
+	writeFile(t, list, "sub\n", 0o644)
+
+	stdout, _ := mustRun(t, nil, "--cre", "--file", "-", "--dir", src, "--verb", "--xz", "--files-from", list)
+	if !strings.HasPrefix(stdout, "\xfd7zXZ") {
+		t.Fatalf("--xz archive starts %q", stdout[:min(6, len(stdout))])
+	}
+
+	for _, args := range [][]string{
+		{"--extr", "--strip", "1", "--xz", "-C"},
+		{"--ext", "--strip=1", "-J", "--directory"},
+	} {
+		dst := t.TempDir()
+		mustRun(t, []byte(stdout), append(args, dst)...)
+
+		if got := readFile(t, filepath.Join(dst, "run.sh")); !strings.Contains(got, "#!") {
+			t.Errorf("tar %v: run.sh after --strip 1 reads %q", args, got)
+		}
 	}
 }

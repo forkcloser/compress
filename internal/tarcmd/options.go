@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/user"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -238,10 +239,19 @@ func (o *options) shortWithValue(letter rune, value string) error {
 }
 
 // long applies one long option, given without its dashes, with its value
-// after '=' or in the next word. It returns how many following words it
-// consumed.
+// after '=' or in the next word; the name may be any unambiguous prefix of
+// an option's, as getopt_long takes it for GNU tar and as bsdtar takes it.
+// It returns how many following words it consumed.
 func (o *options) long(spec string, following []string) (int, error) {
-	name, value, hasValue := strings.Cut(spec, "=")
+	given, value, hasValue := strings.Cut(spec, "=")
+	if given == "" {
+		return 0, usage("unrecognized option '--%s'", spec)
+	}
+
+	name, err := resolveLong(given)
+	if err != nil {
+		return 0, err
+	}
 
 	flag, isFlag := longFlags()[name]
 	if isFlag {
@@ -252,10 +262,7 @@ func (o *options) long(spec string, following []string) (int, error) {
 		return 0, flag(o)
 	}
 
-	withValue, takesValue := longWithValue()[name]
-	if !takesValue {
-		return 0, usage("unrecognized option '--%s'", name)
-	}
+	withValue := longWithValue()[name]
 
 	if hasValue {
 		return 0, withValue(o, value)
@@ -266,6 +273,50 @@ func (o *options) long(spec string, following []string) (int, error) {
 	}
 
 	return 1, withValue(o, following[0])
+}
+
+// resolveLong is the long option the given text names: itself when it is
+// an option's whole name, else the one option it is a prefix of. No option
+// is unrecognized; several are ambiguous, listed as GNU tar lists them.
+func resolveLong(given string) (string, error) {
+	flags, withValue := longFlags(), longWithValue()
+
+	if _, ok := flags[given]; ok {
+		return given, nil
+	}
+
+	if _, ok := withValue[given]; ok {
+		return given, nil
+	}
+
+	var found []string
+
+	for name := range flags {
+		if strings.HasPrefix(name, given) {
+			found = append(found, name)
+		}
+	}
+
+	for name := range withValue {
+		if strings.HasPrefix(name, given) {
+			found = append(found, name)
+		}
+	}
+
+	switch len(found) {
+	case 0:
+		return "", usage("unrecognized option '--%s'", given)
+	case 1:
+		return found[0], nil
+	}
+
+	slices.Sort(found)
+
+	for i, name := range found {
+		found[i] = "'--" + name + "'"
+	}
+
+	return "", usage("option '--%s' is ambiguous; possibilities: %s", given, strings.Join(found, " "))
 }
 
 // setFlag is a long option without a value: it sets one field.

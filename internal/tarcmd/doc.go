@@ -12,7 +12,8 @@
 // --help, --version. The
 // first argument may be an old-style option bundle (xf, cvzf); short options
 // cluster (-xzf); long options take their argument after '=' or as the next
-// word. Anything else is a usage error. Members named for --extract or
+// word and may be given as any unambiguous prefix of their name, as GNU tar
+// and bsdtar take them. Anything else is a usage error. Members named for --extract or
 // --list, on the command line or in -T files, select the entries taken: a
 // name as the archive carries it, or a directory with everything under it;
 // one no entry carries is reported and the status is 2.

@@ -53,7 +53,8 @@ guessing.
   `--no-same-permissions`, `--format`, `--posix`, `--owner`, `--group`,
   `--numeric-owner`, `--mtime`, `--sort`, `--no-recursion`, `--exclude`,
   `--delay-directory-restore`, `--force-local`. The old-style first argument
-  (`xf`, `cvzf`) and clustered short options work as in GNU tar; a read
+  (`xf`, `cvzf`) and clustered short options work as in GNU tar, and a long
+  option may be given as any unambiguous prefix of its name (`--strip 1`); a read
   without a compression flag picks the decoder by magic, and a known
   compressor given to `-I` (`zstd`, `zstdmt`, `unzstd`, `gzip`, `xz`, …) is
   the built-in codec, any other a filter run with `-d` to read. Extraction
