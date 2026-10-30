@@ -35,13 +35,14 @@ With no FILE, or when FILE is -, read standard input.
 // Format is the gzip tool.
 func Format() *filecodec.Format {
 	return &filecodec.Format{
-		Name:         "gzip",
-		Suffix:       ".gz",
-		Suffixes:     map[string]string{".gz": "", ".tgz": ".tar", ".taz": ".tar", "-gz": "", ".z": "", "-z": ""},
-		MinLevel:     1,
-		MaxLevel:     9,
-		DefaultLevel: 6,
-		Warning:      filecodec.ExitWarning,
+		Name:          "gzip",
+		Suffix:        ".gz",
+		Suffixes:      map[string]string{".gz": "", ".tgz": ".tar", ".taz": ".tar", "-gz": "", ".z": "", "-z": ""},
+		MinLevel:      1,
+		MaxLevel:      9,
+		DefaultLevel:  6,
+		Warning:       filecodec.ExitWarning,
+		Abbreviations: true,
 		Compress: func(w io.Writer, level int, header filecodec.Header) (io.WriteCloser, error) {
 			writer, err := kgzip.NewWriterLevel(w, level)
 			if err != nil {

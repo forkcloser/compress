@@ -194,6 +194,8 @@ func TestRefusals(t *testing.T) {
 		want string
 	}{
 		{[]string{"--bogus"}, "unrecognized option '--bogus'"},
+		// zstd's own parser takes whole names only.
+		{[]string{"--vers"}, "unrecognized option '--vers'"},
 		{[]string{"-y"}, "invalid option -- 'y'"},
 		{[]string{"-T"}, "requires an argument"},
 		{[]string{"-Tx"}, "invalid thread count"},

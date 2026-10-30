@@ -181,6 +181,7 @@ func TestRefusals(t *testing.T) {
 		want   string
 	}{
 		{[]string{"--bogus"}, filecodec.ExitError, "unrecognized option '--bogus'"},
+		{[]string{"--n"}, filecodec.ExitError, "option '--n' is ambiguous; possibilities: '--name' '--no-name'"},
 		{[]string{"-0"}, filecodec.ExitError, "compression level 0"},
 		{[]string{"-d", plain}, filecodec.ExitWarning, "unknown suffix -- ignored"},
 		{[]string{"-d", filepath.Join(dir, "missing.gz")}, filecodec.ExitError, "missing.gz"},
@@ -219,7 +220,9 @@ func TestRefusals(t *testing.T) {
 		t.Errorf("overwritten without --force: %q", got)
 	}
 
-	for _, flag := range []string{"--help", "-V"} {
+	// The abbreviated forms, any unambiguous prefix, as getopt_long takes
+	// them for gzip.
+	for _, flag := range []string{"--help", "-V", "--he", "--vers"} {
 		if got := mustRun(t, "gzip", nil, flag); got == "" {
 			t.Errorf("%s printed nothing", flag)
 		}
