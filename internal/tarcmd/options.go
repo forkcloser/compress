@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"os/user"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/forkcloser/compress/internal/longopt"
 )
 
 // mode is what the invocation does with the archive.
@@ -275,48 +276,27 @@ func (o *options) long(spec string, following []string) (int, error) {
 	return 1, withValue(o, following[0])
 }
 
-// resolveLong is the long option the given text names: itself when it is
-// an option's whole name, else the one option it is a prefix of. No option
-// is unrecognized; several are ambiguous, listed as GNU tar lists them.
+// resolveLong is the long option the given text names: a whole name, or
+// the one it is a prefix of, as getopt_long takes it for GNU tar and as
+// bsdtar takes it.
 func resolveLong(given string) (string, error) {
 	flags, withValue := longFlags(), longWithValue()
-
-	if _, ok := flags[given]; ok {
-		return given, nil
-	}
-
-	if _, ok := withValue[given]; ok {
-		return given, nil
-	}
-
-	var found []string
+	names := make([]string, 0, len(flags)+len(withValue))
 
 	for name := range flags {
-		if strings.HasPrefix(name, given) {
-			found = append(found, name)
-		}
+		names = append(names, name)
 	}
 
 	for name := range withValue {
-		if strings.HasPrefix(name, given) {
-			found = append(found, name)
-		}
+		names = append(names, name)
 	}
 
-	switch len(found) {
-	case 0:
-		return "", usage("unrecognized option '--%s'", given)
-	case 1:
-		return found[0], nil
+	name, diag := longopt.Resolve(given, names)
+	if diag != "" {
+		return "", usage("%s", diag)
 	}
 
-	slices.Sort(found)
-
-	for i, name := range found {
-		found[i] = "'--" + name + "'"
-	}
-
-	return "", usage("option '--%s' is ambiguous; possibilities: %s", given, strings.Join(found, " "))
+	return name, nil
 }
 
 // setFlag is a long option without a value: it sets one field.

@@ -8,8 +8,11 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/forkcloser/xos"
+
+	"github.com/forkcloser/compress/internal/longopt"
 )
 
 // Exit statuses, the tools'.
@@ -48,6 +51,10 @@ type Format struct {
 	// letter or a long name, each with whether it takes a value, applied
 	// to the options or refused.
 	Extra map[string]Extra
+	// Abbreviations is whether a long option may be given as any unambiguous
+	// prefix of its name, as getopt_long takes it for gzip and xz; zstd's
+	// own parser refuses one.
+	Abbreviations bool
 	// Help is the --help text.
 	Help string
 }
@@ -293,6 +300,15 @@ func shortOption(opts *Options, letter rune) error {
 func (f *Format) long(opts *Options, spec string, following []string) (int, error) {
 	name, value, hasValue := strings.Cut(spec, "=")
 
+	if f.Abbreviations && name != "" {
+		resolved, err := f.resolveLong(name)
+		if err != nil {
+			return 0, err
+		}
+
+		name = resolved
+	}
+
 	if extra, ok := f.Extra[name]; ok {
 		return longExtra(opts, name, extra, value, hasValue, following)
 	}
@@ -330,6 +346,33 @@ func (f *Format) long(opts *Options, spec string, following []string) (int, erro
 	}
 
 	return 0, nil
+}
+
+// sharedLong are the long options every tool takes, the names long switches on.
+func sharedLong() []string {
+	return []string{
+		"stdout", "to-stdout", "decompress", "uncompress", "compress", "force", "keep",
+		"quiet", "verbose", "test", "fast", "best", "help", "version",
+	}
+}
+
+// resolveLong is the long option the given text names, among the shared
+// ones and the tool's own: a whole name, or the one it is a prefix of.
+func (f *Format) resolveLong(given string) (string, error) {
+	names := sharedLong()
+
+	for name := range f.Extra {
+		if utf8.RuneCountInString(name) > 1 {
+			names = append(names, name)
+		}
+	}
+
+	name, diag := longopt.Resolve(given, names)
+	if diag != "" {
+		return "", fmt.Errorf("%w: %s", errUsage, diag)
+	}
+
+	return name, nil
 }
 
 // longExtra applies a tool's own long option, with its value after '=' or

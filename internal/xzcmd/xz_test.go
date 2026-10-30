@@ -191,6 +191,12 @@ func TestRefusals(t *testing.T) {
 		want   string
 	}{
 		{[]string{"--bogus"}, filecodec.ExitError, "unrecognized option '--bogus'"},
+		{[]string{"--ver"}, filecodec.ExitError, "option '--ver' is ambiguous; possibilities: '--verbose' '--version'"},
+		{
+			[]string{"--memlimit-=1MiB"},
+			filecodec.ExitError,
+			"option '--memlimit-' is ambiguous; possibilities: '--memlimit-compress' '--memlimit-decompress'",
+		},
 		{[]string{"-y"}, filecodec.ExitError, "invalid option -- 'y'"},
 		{[]string{"-T"}, filecodec.ExitError, "requires an argument"},
 		{[]string{"-Tx"}, filecodec.ExitError, "invalid thread count"},
@@ -224,7 +230,9 @@ func TestRefusals(t *testing.T) {
 		t.Errorf("--test wrote %q", got)
 	}
 
-	for _, flag := range []string{"--help", "-V"} {
+	// The abbreviated forms, any unambiguous prefix, as getopt_long takes
+	// them for xz; a whole name wins over the longer names it prefixes.
+	for _, flag := range []string{"--help", "-V", "--he", "--vers", "--memlimit=64MiB"} {
 		if got := mustRun(t, "xz", nil, flag); got == "" {
 			t.Errorf("%s printed nothing", flag)
 		}

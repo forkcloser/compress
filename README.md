@@ -69,8 +69,10 @@ guessing.
   `-19`), gzip's `-n`/`-N`, zstd's `--rm`. xz and gzip remove their input
   unless `-k`; zstd keeps it unless `--rm`, as the tools do. `unxz`, `xzcat`,
   `gunzip`, `zcat`, `unzstd` and `zstdcat` are the same binaries invoked by
-  those names. Exit 0, 1 after an error, 2 after a warning alone (zstd has
-  no warning status: 1).
+  those names. xz and gzip take a long option as any unambiguous prefix of
+  its name, as getopt_long does; zstd takes whole names, as its own parser
+  does. Exit 0, 1 after an error, 2 after a warning alone (zstd has no
+  warning status: 1).
 - **zip**: `zip [-options] archive [input ...]` with `-r`, `-q`, `-0`…`-9`,
   `-X`, `-@`, `-o`, `-j`, `-D`; an existing archive is updated, `-` writes
   to standard output, names come from standard input under `-@`, and `-X`
