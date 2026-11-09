@@ -160,10 +160,14 @@ checksum:
 # ${COSIGN_KEY:-} survives for the shell to branch on. One line, not a block
 # scalar: yamlfmt corrupts folded scalars.
 signs:
-  - cmd: cosign
+  - cmd: just
     artifacts: checksum
     signature: "${artifact}.sigstore.json"
-    args: [sign-blob, --yes, --bundle, "${signature}", "${artifact}"]
+    args:
+      - do
+      - release-sign
+      - "${artifact}"
+      - "${signature}"
 
 release:
   # A prerelease-suffixed tag is published as a GitHub prerelease, never the
