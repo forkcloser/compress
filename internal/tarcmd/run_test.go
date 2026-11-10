@@ -9,6 +9,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -25,6 +26,35 @@ import (
 	"github.com/forkcloser/compress/internal/reference"
 	"github.com/forkcloser/compress/internal/tarcmd"
 )
+
+// passthroughFilter is the one executable the tests run, and TestMain
+// writes it before any test runs: a script written while another test's
+// child is between fork and exec is inherited by that child, write
+// descriptor and all, until the exec, and running it in that window fails
+// with "text file busy" (golang/go#22315; the verify lane met it with
+// zstdmt and the system tar in flight). Written once with no child alive,
+// it is run freely by the parallel tests.
+var passthroughFilter string //nolint:gochecknoglobals // set once in TestMain, read by the tests
+
+func TestMain(m *testing.M) {
+	dir, err := os.MkdirTemp("", "tarcmd-filter-*")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	passthroughFilter = filepath.Join(dir, "passthrough")
+
+	script := "#!/bin/sh\nif [ \"$1\" = -d ]; then shift; fi\nexec cat\n"
+	if err := os.WriteFile(passthroughFilter, []byte(script), 0o755); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
+
+	m.Run()
+
+	_ = os.RemoveAll(dir)
+}
 
 // run invokes the command with args and stdin, returning its status and the
 // two output streams.
@@ -1019,8 +1049,7 @@ func TestCompressProgram(t *testing.T) {
 		t.Skip("the filter is a shell script")
 	}
 
-	filter := filepath.Join(t.TempDir(), "passthrough")
-	writeFile(t, filter, "#!/bin/sh\nif [ \"$1\" = -d ]; then shift; fi\nexec cat\n", 0o755)
+	filter := passthroughFilter
 
 	src := tree(t)
 	archive := filepath.Join(t.TempDir(), "through.tar")
