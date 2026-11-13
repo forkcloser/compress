@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
 
 	"github.com/forkcloser/compress/internal/filecodec"
 	"github.com/forkcloser/compress/internal/reference"

@@ -1,7 +1,7 @@
 github.com/forkcloser/xos v0.1.1 h1:0ooxYTQyLUOt2rX/O4JzMAGz1psiWxZUfp5hvGm1TB8=
 github.com/forkcloser/xos v0.1.1/go.mod h1:BxyGnZr+xW0m+0ph1xQ0qwHYs30hiXeUP7foOlKvxP0=
-github.com/forkcloser/xz v1.1.2 h1:lTJexF5hDWc7gw1+d7/+iPLOYZ1jlBoD4kTfwz0dNTc=
-github.com/forkcloser/xz v1.1.2/go.mod h1:HHg5hb2lUURZe4jgnNIKLbBWjhX/I6kfVp79nthflu0=
+github.com/forkcloser/xz/v2 v2.0.0-rc.1 h1:zz/nm70XyuKWQQGrbj2m38cRP69eL5tY1+6MiTF4u1A=
+github.com/forkcloser/xz/v2 v2.0.0-rc.1/go.mod h1:YpLWixe5PLIXGGF5pLhAnvCPajHi6/LX/9AqsDmoyV0=
 github.com/klauspost/compress v1.20.4 h1:dD0v/bvxtjCBqQu6sx1TNWkalEY5lNTIe+HY9w8TeNI=
 github.com/klauspost/compress v1.20.4/go.mod h1:LUdAzn7YLVvxLpc7y3V1m40wESHTgc1422pwwBSKYuI=
 github.com/pierrec/lz4/v4 v4.1.33 h1:GjG1TJ1V4IzKP8L96muuuDNpTwd7D+l2ccXrjAbe014=

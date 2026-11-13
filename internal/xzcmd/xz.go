@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	uxz "github.com/forkcloser/xz"
+	uxz "github.com/forkcloser/xz/v2"
 
 	"github.com/forkcloser/compress/internal/constants"
 	"github.com/forkcloser/compress/internal/filecodec"
@@ -70,7 +70,7 @@ func Format() *filecodec.Format {
 		Warning:       filecodec.ExitWarning,
 		Abbreviations: true,
 		Compress: func(w io.Writer, level int, _ filecodec.Header) (io.WriteCloser, error) {
-			writer, err := uxz.WriterConfig{DictCap: dictCaps()[level]}.NewWriter(w)
+			writer, err := uxz.NewWriter(w, uxz.WithDictSize(dictCaps()[level]))
 			if err != nil {
 				return nil, fmt.Errorf("xz encoder: %w", err)
 			}

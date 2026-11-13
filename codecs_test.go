@@ -18,7 +18,7 @@ import (
 	kzstd "github.com/klauspost/compress/zstd"
 	plz4 "github.com/pierrec/lz4/v4"
 
-	uxz "github.com/forkcloser/xz"
+	uxz "github.com/forkcloser/xz/v2"
 
 	"github.com/forkcloser/compress"
 	"github.com/forkcloser/compress/bzip2"
