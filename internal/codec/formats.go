@@ -26,7 +26,7 @@ import (
 	kzstd "github.com/klauspost/compress/zstd"
 	plz4 "github.com/pierrec/lz4/v4"
 
-	uxz "github.com/forkcloser/xz"
+	uxz "github.com/forkcloser/xz/v2"
 )
 
 // The raw constructors: each format's decoder or encoder as its library
@@ -59,10 +59,10 @@ func Xz(r io.Reader) (io.ReadCloser, error) {
 }
 
 // XzAt is the xz decoder over a seekable input of known size: the block
-// index at the stream's end lets it decode blocks in parallel, so it reads
-// no further ahead of its consumer than it already does.
+// index at the stream's end lets it decode blocks in parallel, on every
+// CPU, so it reads no further ahead of its consumer than it already does.
 func XzAt(r io.ReaderAt, size int64) (io.ReadCloser, error) {
-	decoder, err := uxz.NewParallelReader(r, size)
+	decoder, err := uxz.NewReader(io.NewSectionReader(r, 0, size), uxz.WithWorkers(0))
 	if err != nil {
 		return nil, fmt.Errorf("xz decoder: %w", err)
 	}

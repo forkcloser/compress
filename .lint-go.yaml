@@ -43,7 +43,7 @@ golangci:
             allow:
               # The codecs: zstd and gzip, xz, lz4. bzip2 is the standard library's.
               - github.com/klauspost/compress
-              - github.com/forkcloser/xz
+              - github.com/forkcloser/xz/v2
               - github.com/pierrec/lz4/v4
               # The commands' file opens, with the share mode os lacks on Windows.
               - github.com/forkcloser/xos

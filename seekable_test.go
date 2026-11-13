@@ -26,7 +26,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/forkcloser/xz"
+	"github.com/forkcloser/xz/v2"
 
 	"github.com/forkcloser/compress"
 	"github.com/forkcloser/compress/internal/constants"
@@ -73,7 +73,7 @@ func xzBlocks(tb testing.TB, payload []byte, blockSize int64) []byte {
 
 	var buf bytes.Buffer
 
-	writer, err := xz.WriterConfig{BlockSize: blockSize}.NewWriter(&buf)
+	writer, err := xz.NewWriter(&buf, xz.WithBlockSize(blockSize))
 	if err != nil {
 		tb.Fatal(err)
 	}
