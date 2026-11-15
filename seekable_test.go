@@ -36,11 +36,14 @@ import (
 // io.ReaderAt and an io.Seeker is decoded from its offset to its end, read at
 // offsets and never through Read, and xz, whose index sits at the end, is
 // decoded in parallel; an input that only reads stays on the stream path, as
-// does a seekable input of a format seekability buys nothing. The failures:
-// an input whose Seek overstates its size is a stream that is not what it
-// says, ErrCorrupt; one whose ReadAt fails is ErrSource, as is one whose
-// Seek cannot restore the offset once the end was measured, since it then
-// sits at its end with nothing for either path.
+// does a seekable input of a format seekability buys nothing. An input whose
+// Seek overstates its size is decoded as the stream it holds; one whose Seek
+// understates it is that stream cut short, ErrCorrupt, unless what it
+// reports is too short to hold a magic, which is read as a stream. The
+// failures: an
+// input whose ReadAt fails is ErrSource, as is one whose Seek cannot restore
+// the offset once the end was measured, since it then sits at its end with
+// nothing for either path.
 
 // counted is a seekable input counting the calls each path makes.
 type counted struct {
@@ -221,36 +224,69 @@ func TestSeekableInputOfAStreamFormatStaysOnTheStreamPath(t *testing.T) {
 	}
 }
 
-// overstated is a seekable input whose Seek reports more bytes than its
-// ReadAt can serve.
-type overstated struct {
+// misstated is a seekable input whose Seek reports its size off by delta:
+// more bytes than its ReadAt can serve, or fewer than it holds.
+type misstated struct {
 	*bytes.Reader
 
-	extra int64
+	delta int64
 }
 
-func (o *overstated) Seek(offset int64, whence int) (int64, error) {
+func (m *misstated) Seek(offset int64, whence int) (int64, error) {
 	if whence == io.SeekEnd {
-		return o.Size() + o.extra, nil
+		return m.Size() + m.delta, nil
 	}
 
-	return o.Reader.Seek(offset, whence)
+	return m.Reader.Seek(offset, whence)
 }
 
 func TestSeekableSizeThatLies(t *testing.T) {
 	t.Parallel()
 
-	data := xzBlocks(t, payload(300*constants.KiB), 64*constants.KiB)
-	input := &overstated{Reader: bytes.NewReader(data), extra: 4096}
+	want := payload(300 * constants.KiB)
+	data := xzBlocks(t, want, 64*constants.KiB)
 
-	reader, err := compress.Decompress(input)
+	// More than it has: the stream it holds, whole.
+	reader, err := compress.Decompress(&misstated{Reader: bytes.NewReader(data), delta: 4096})
+	if err != nil {
+		t.Fatalf("an input overstating its size: %v; want it decoded", err)
+	}
+
+	if got := drain(t, reader); !bytes.Equal(got, want) {
+		t.Fatalf("an input overstating its size: %d bytes back; want %d", len(got), len(want))
+	}
+
+	// Fewer than it holds: the stream cut short, with nothing past the cut.
+	reader, err = compress.Decompress(&misstated{Reader: bytes.NewReader(data), delta: -int64(len(data) / 2)})
+
+	var got []byte
+
 	if err == nil {
-		_, err = io.ReadAll(reader)
+		got, err = io.ReadAll(reader)
 		_ = reader.Close()
 	}
 
 	if !errors.Is(err, compress.ErrCorrupt) {
-		t.Fatalf("an input overstating its size: %v; want ErrCorrupt", err)
+		t.Fatalf("an input understating its size: %v; want ErrCorrupt", err)
+	}
+
+	if len(got) == len(want) || !bytes.HasPrefix(want, got) {
+		t.Fatalf("an input understating its size: %d bytes back; want a start of the payload's %d", len(got), len(want))
+	}
+
+	// Too few to hold a magic, down to none and to an end before the start:
+	// not seekable, so read as a stream, whole.
+	for _, reported := range []int64{5, 0, -1} {
+		input := &misstated{Reader: bytes.NewReader(data), delta: reported - int64(len(data))}
+
+		reader, err = compress.Decompress(input)
+		if err != nil {
+			t.Fatalf("an input reporting %d bytes: %v; want it read as a stream", reported, err)
+		}
+
+		if got := drain(t, reader); !bytes.Equal(got, want) {
+			t.Fatalf("an input reporting %d bytes: %d bytes back; want %d", reported, len(got), len(want))
+		}
 	}
 }
 
