@@ -157,9 +157,11 @@ func (c *compressed) Close() error {
 // its end, and a format registered with a seekable decoder (xz, whose block
 // index sits at the end) decodes it in parallel, the way io.Copy takes a
 // faster path when the operands offer one. The input's offset is left where
-// it was; its bytes are read at offsets, never through Read. A size the
-// input misreports shows up as the stream cut short or as a failure of the
-// input, ErrCorrupt or ErrSource.
+// it was; its bytes are read at offsets, never through Read. An input that
+// reports more bytes than it has is decoded as the stream it holds; one that
+// reports fewer is that stream cut short, ErrCorrupt. One that reports too
+// few to hold a format's magic is not taken for seekable: it is read as a
+// stream, through Read, and decoded as what it holds.
 func Decompress(reader io.Reader) (io.ReadCloser, error) {
 	formatsMu.RLock()
 
