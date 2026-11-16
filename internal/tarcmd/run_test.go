@@ -547,6 +547,99 @@ func TestUsage(t *testing.T) {
 	}
 }
 
+// TestDirectoryChangedAsRead: a directory whose entries are not the same
+// once they are archived as when they were listed is reported, "directory
+// changed as we read it", and the run exits with failure: a name that came,
+// a name that went, a name that became another. The archive holds the first
+// listing and no entry failed, so nothing else would say that it is not
+// the tree. A name the run excludes is no part of the archive, and its
+// coming or going is not reported. The archive goes to a pipe: once the
+// content of the directory's large file is coming out, the listing is
+// behind and the small file before it is archived; the directory is changed
+// then, before the pipe is drained.
+func TestDirectoryChangedAsRead(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		change  func(dir string) error
+		exclude string
+		said    bool
+	}{
+		"left alone": {func(string) error { return nil }, "", false},
+		"a name came": {func(dir string) error {
+			return os.WriteFile(filepath.Join(dir, "late"), []byte("x"), 0o644)
+		}, "", true},
+		"a name went": {func(dir string) error { return os.Remove(filepath.Join(dir, "a")) }, "", true},
+		"a name became another": {func(dir string) error {
+			return os.Rename(filepath.Join(dir, "a"), filepath.Join(dir, "c"))
+		}, "", true},
+		"an excluded name came": {func(dir string) error {
+			return os.WriteFile(filepath.Join(dir, "work.tmp"), []byte("x"), 0o644)
+		}, "*.tmp", false},
+		"an excluded name went": {func(dir string) error { return os.Remove(filepath.Join(dir, "a")) }, "a", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			root := t.TempDir()
+			dir := filepath.Join(root, "tree")
+
+			if err := os.Mkdir(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			writeFile(t, filepath.Join(dir, "a"), "a", 0o644)
+
+			if err := os.WriteFile(filepath.Join(dir, "big"), make([]byte, 1<<20), 0o644); err != nil {
+				t.Fatal(err)
+			}
+
+			args := []string{"-cf", "-", "--sort=name", "-C", root}
+			if tc.exclude != "" {
+				args = append(args, "--exclude="+tc.exclude)
+			}
+
+			read, write := io.Pipe()
+
+			var diag bytes.Buffer
+
+			status := make(chan int, 1)
+
+			go func() {
+				status <- tarcmd.Run(append(args, "tree"), nil, write, &diag, "test")
+
+				_ = write.Close()
+			}()
+
+			// Past the directory's entry and the small file's, into the
+			// large file's content: three headers and a block is the most
+			// that comes before it.
+			if _, err := io.ReadFull(read, make([]byte, 4*512+4096)); err != nil {
+				t.Fatal(err)
+			}
+
+			if err := tc.change(dir); err != nil {
+				t.Fatal(err)
+			}
+
+			if _, err := io.Copy(io.Discard, read); err != nil {
+				t.Fatal(err)
+			}
+
+			got := <-status
+			said := strings.Contains(diag.String(), "tree: directory changed as we read it")
+
+			if tc.said && (got != tarcmd.ExitError || !said) {
+				t.Errorf("status %d, %q; want a failure that names the directory", got, diag.String())
+			}
+
+			if !tc.said && (got != tarcmd.ExitOK || diag.Len() != 0) {
+				t.Errorf("status %d, %q; want success and nothing said", got, diag.String())
+			}
+		})
+	}
+}
+
 // TestMemberErrors: a member that cannot be read is reported, the others
 // are archived, and the status says a failure happened.
 func TestMemberErrors(t *testing.T) {

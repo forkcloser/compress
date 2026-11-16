@@ -232,7 +232,48 @@ func (c *creator) addChildren(fsPath, archiveName string) error {
 		}
 	}
 
+	c.checkUnchanged(fsPath, archiveName, entries)
+
 	return nil
+}
+
+// checkUnchanged reads the directory again once its entries are archived
+// and reports it when the names are not the ones first read. The archive
+// then holds the first reading, short of the tree or past it, and nothing
+// else says so: no entry failed. The run goes on and exits with failure.
+// Excluded names are no part of the archive and are left out of both
+// readings: what a caller excludes is often what moves.
+func (c *creator) checkUnchanged(fsPath, archiveName string, entries []os.DirEntry) {
+	dir, err := xos.Open(fsPath)
+	if err != nil {
+		c.reportf("%s: directory changed as we read it", archiveName)
+
+		return
+	}
+
+	again, err := dir.ReadDir(-1)
+
+	_ = dir.Close() // read-only: a close error carries nothing
+
+	if err != nil || !slices.Equal(c.archived(archiveName, entries), c.archived(archiveName, again)) {
+		c.reportf("%s: directory changed as we read it", archiveName)
+	}
+}
+
+// archived is the names of a directory's entries that are not excluded,
+// sorted.
+func (c *creator) archived(archiveName string, entries []os.DirEntry) []string {
+	names := make([]string, 0, len(entries))
+
+	for _, entry := range entries {
+		if !excluded(c.opts.excludes, archiveName+"/"+entry.Name()) {
+			names = append(names, entry.Name())
+		}
+	}
+
+	slices.Sort(names)
+
+	return names
 }
 
 // header builds the entry for one path: the file's own metadata, then the
