@@ -388,6 +388,30 @@ func TestLongListing(t *testing.T) {
 	}
 }
 
+// TestGzipHeaderHasNoTime: an archive written through gzip states no
+// modification time in the gzip header: its time field, bytes 4 to 8, is
+// zero, RFC 1952's "no time stamp is available", whatever --mtime gives
+// the members. A time there would be one more thing for two runs to differ
+// by, and gzip -N restores it on the file it unpacks.
+func TestGzipHeaderHasNoTime(t *testing.T) {
+	t.Parallel()
+
+	src := tree(t)
+
+	for _, mtime := range [][]string{nil, {"--mtime=@0"}, {"--mtime=@1700000000"}} {
+		args := append([]string{"-czf", "-", "-C", src, "hello.txt"}, mtime...)
+
+		stdout, _ := mustRun(t, nil, args...)
+		if len(stdout) < 10 || stdout[:4] != "\x1f\x8b\x08\x00" {
+			t.Fatalf("%v: not a gzip stream with no optional fields: % x", mtime, stdout[:min(10, len(stdout))])
+		}
+
+		if field := stdout[4:8]; field != "\x00\x00\x00\x00" {
+			t.Errorf("%v: the gzip header's time field is % x, want zero", mtime, field)
+		}
+	}
+}
+
 // TestDeterministic: the flags curl-for-win packages with produce the same
 // bytes twice, in ustar, with the owner, group and mtime forced.
 func TestDeterministic(t *testing.T) {
