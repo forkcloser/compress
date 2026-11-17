@@ -43,6 +43,9 @@ type creator struct {
 	opts   *options
 	stdout io.Writer
 	stderr io.Writer
+	// lines is where the entry lines go: standard output, unless the
+	// archive does.
+	lines io.Writer
 
 	// self is the archive as this run finds it, nil when there is none yet
 	// or it is standard output.
@@ -71,7 +74,11 @@ func (c *creator) errorf(status int, format string, args ...any) int {
 
 func (c *creator) run() int {
 	var target string
-	if c.opts.archive != "-" {
+
+	if c.opts.archive == "-" {
+		c.lines = c.stderr
+	} else {
+		c.lines = c.stdout
 		target = archiveName(c.opts.archive)
 		c.self, _ = os.Stat(target)
 	}
@@ -528,7 +535,7 @@ func (c *creator) flush() {
 				header.UncompressedSize64/2) / header.UncompressedSize64
 		}
 
-		fmt.Fprintf(c.stdout, "%8s: %s (%s %d%%)\n", c.pending.verb, header.Name, method, saved)
+		fmt.Fprintf(c.lines, "%8s: %s (%s %d%%)\n", c.pending.verb, header.Name, method, saved)
 	}
 
 	c.pending = nil
