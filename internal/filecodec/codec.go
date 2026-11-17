@@ -480,6 +480,30 @@ func (r *runner) file(name string) {
 	r.toFile(name, info)
 }
 
+// vacate is --force making room at the counterpart's name: what holds it
+// is removed, never opened, so a link there is not written through. A
+// directory is refused, not removed: Remove would take an empty one.
+func (r *runner) vacate(target string) bool {
+	held, err := os.Lstat(target)
+	if err != nil {
+		return true // nothing there, or the create says what is wrong
+	}
+
+	if held.IsDir() {
+		r.failf("%s: is a directory", target)
+
+		return false
+	}
+
+	if err := os.Remove(target); err != nil {
+		r.failf("%s: %v", target, reason(err))
+
+		return false
+	}
+
+	return true
+}
+
 // toStream decompresses or compresses name to standard output, or to
 // nothing under --test; the file stays.
 func (r *runner) toStream(name string, info os.FileInfo) {
@@ -519,12 +543,11 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 
 	defer func() { _ = source.Close() }() // read-only: a close error carries nothing
 
-	flags := os.O_WRONLY | os.O_CREATE | os.O_EXCL
-	if r.opts.Force {
-		flags = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	if r.opts.Force && !r.vacate(target) {
+		return
 	}
 
-	out, err := xos.OpenFile(target, flags, info.Mode().Perm())
+	out, err := xos.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			r.warnf("%s already exists; not overwritten", target)
