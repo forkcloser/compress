@@ -8,9 +8,13 @@
 // lands outside it. Options: -q, -o, -n, -d, -l, -t, -p, -j, -x, -h. Member
 // patterns take "*" and "?", "*" matching across "/" as Info-ZIP's does.
 // Anything else is a usage error. Without -o or -n, a file that exists is
-// left alone and reported, where Info-ZIP would ask.
+// left alone and reported, where Info-ZIP would ask. An entry that cannot
+// be read at all, its data encrypted (there is no password to ask for) or
+// its method one there is no decompressor for, is skipped before anything
+// in its place is touched.
 //
 // Exit status is Info-ZIP's: 0, 1 after a warning (an entry skipped), 2 when
-// an entry is damaged, 9 when the archive cannot be found or read, 10 for a
-// usage error, 11 when no member matched. Diagnostics go to standard error.
+// an entry is damaged, 5 when one is encrypted, 9 when the archive cannot be
+// found or read, 10 for a usage error, 11 when no member matched, 81 when an
+// entry's method is not supported. Diagnostics go to standard error.
 package unzipcmd

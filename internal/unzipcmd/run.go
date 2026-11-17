@@ -7,6 +7,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"slices"
 	"strings"
 
 	"github.com/forkcloser/compress/internal/constants"
@@ -14,13 +15,28 @@ import (
 
 // Exit statuses, Info-ZIP's.
 const (
-	ExitOK      = 0
-	ExitWarning = 1
-	ExitError   = 2
-	ExitArchive = 9
-	ExitUsage   = 10
-	ExitNoMatch = 11
+	ExitOK          = 0
+	ExitWarning     = 1
+	ExitError       = 2
+	ExitPassword    = 5
+	ExitArchive     = 9
+	ExitUsage       = 10
+	ExitNoMatch     = 11
+	ExitUnsupported = 81
 )
+
+// worse is the status a run ends with out of two, as Info-ZIP settles it:
+// an error by its value, over a pattern that matched nothing, over an entry
+// skipped for its method, over a warning.
+func worse(one, other int) int {
+	severity := []int{ExitOK, ExitWarning, ExitUnsupported, ExitNoMatch, ExitError, ExitPassword}
+
+	if slices.Index(severity, other) > slices.Index(severity, one) {
+		return other
+	}
+
+	return one
+}
 
 // Run is the unzip command: args follow the command name.
 func Run(args []string, stdout, stderr io.Writer, version string) int {

@@ -20,43 +20,68 @@ func list(files []*zip.File, stdout io.Writer) int {
 			when.Month(), when.Day(), when.Year(), when.Hour(), when.Minute(), file.Name)
 	}
 
-	plural := "s"
-	if len(files) == 1 {
-		plural = ""
-	}
-
 	fmt.Fprint(stdout, "---------                     -------\n")
-	fmt.Fprintf(stdout, "%9d                     %d file%s\n", total, len(files), plural)
+	fmt.Fprintf(stdout, "%9d                     %d file%s\n", total, len(files), plural(len(files)))
 
 	return ExitOK
 }
 
-// test is -t: every entry read through, its CRC checked at its end.
+// test is -t: every entry read through, its CRC checked at its end. An
+// entry skipped for its method is no error: it is counted apart from the
+// entries tested, and the status says so once nothing worse did.
 func test(name string, files []*zip.File, stdout io.Writer, quiet bool) int {
-	failed := false
+	status := ExitOK
+	tested, unsupported := 0, 0
 
 	for _, file := range files {
 		err := discard(file)
+		skip := skipped(stdout, file.Name, err, quiet)
 
 		switch {
+		case skip == ExitUnsupported:
+			unsupported++
+		case skip != ExitOK:
+			status = worse(status, skip)
 		case err != nil:
-			failed = true
+			status = worse(status, ExitError)
 
 			fmt.Fprintf(stdout, "%11s: %-24s %v\n", "testing", file.Name, err)
-		case !quiet:
-			fmt.Fprintf(stdout, "%11s: %-24s OK\n", "testing", file.Name)
+		default:
+			tested++
+
+			if !quiet {
+				fmt.Fprintf(stdout, "%11s: %-24s OK\n", "testing", file.Name)
+			}
 		}
 	}
 
-	if failed {
+	switch {
+	case status != ExitOK:
 		fmt.Fprintf(stdout, "At least one error was detected in %s.\n", name)
-
-		return ExitError
+	case unsupported == 0:
+		fmt.Fprintf(stdout, "No errors detected in compressed data of %s.\n", name)
+	case tested == 0:
+		fmt.Fprintf(stdout, "Caution:  zero files tested in %s.\n", name)
+	default:
+		fmt.Fprintf(stdout, "No errors detected in %s for the %d file%s tested.\n", name, tested, plural(tested))
 	}
 
-	fmt.Fprintf(stdout, "No errors detected in compressed data of %s.\n", name)
+	if unsupported > 0 {
+		fmt.Fprintf(stdout, "%d file%s skipped because of unsupported compression or encoding.\n",
+			unsupported, plural(unsupported))
 
-	return ExitOK
+		status = worse(status, ExitUnsupported)
+	}
+
+	return status
+}
+
+func plural(count int) string {
+	if count == 1 {
+		return ""
+	}
+
+	return "s"
 }
 
 func discard(file *zip.File) error {
@@ -73,11 +98,21 @@ func pipe(files []*zip.File, stdout, stderr io.Writer) int {
 			continue
 		}
 
-		if err := copyContent(stdout, file); err != nil {
-			fmt.Fprintf(stderr, "%s:  %v\n", file.Name, err)
-
-			status = ExitError
+		err := copyContent(stdout, file)
+		if err == nil {
+			continue
 		}
+
+		// -p is quiet: the line for a method is not written.
+		if skip := skipped(stderr, file.Name, err, true); skip != ExitOK {
+			status = worse(status, skip)
+
+			continue
+		}
+
+		fmt.Fprintf(stderr, "%s:  %v\n", file.Name, err)
+
+		status = worse(status, ExitError)
 	}
 
 	return status

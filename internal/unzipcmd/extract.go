@@ -26,6 +26,16 @@ const (
 	extTimeExtraID = 0x5455
 	ntfsExtraID    = 0x000a
 	unixExtraID    = 0x5855
+
+	// encryptedFlag is the general-purpose bit of an entry whose data is
+	// encrypted.
+	encryptedFlag = 0x1
+)
+
+// The entries Info-ZIP skips rather than fails, in its words.
+var (
+	errPassword = errors.New("unable to get password")
+	errMethod   = errors.New("unsupported compression method")
 )
 
 // extractor writes an archive's entries under one directory, through an
@@ -57,9 +67,27 @@ func (e *extractor) warnf(format string, args ...any) {
 }
 
 func (e *extractor) errorf(format string, args ...any) {
-	e.status = ExitError
+	e.status = worse(e.status, ExitError)
 
 	fmt.Fprintf(e.stderr, format+"\n", args...)
+}
+
+// open is an entry's data, or nothing once the reason is reported. It comes
+// before anything is done in the entry's place: what cannot be read
+// replaces nothing.
+func (e *extractor) open(name string, file *zip.File) (io.ReadCloser, bool) {
+	data, err := content(file)
+	if err == nil {
+		return data, true
+	}
+
+	if status := skipped(e.stderr, file.Name, err, e.opts.quiet); status != ExitOK {
+		e.status = worse(e.status, status)
+	} else {
+		e.errorf("%s:  %v", e.display(name), err)
+	}
+
+	return nil, false
 }
 
 // entry extracts one entry: a directory, a symbolic link, or a file.
@@ -188,6 +216,13 @@ func (e *extractor) exists(name string) bool {
 }
 
 func (e *extractor) file(name string, file *zip.File, mode os.FileMode) {
+	data, ok := e.open(name, file)
+	if !ok {
+		return
+	}
+
+	defer func() { _ = data.Close() }() // read-only: a close error carries nothing
+
 	if !e.parents(name) || e.exists(name) {
 		return
 	}
@@ -204,7 +239,7 @@ func (e *extractor) file(name string, file *zip.File, mode os.FileMode) {
 		return
 	}
 
-	if err := copyContent(out, file); err != nil {
+	if err := copyData(out, data); err != nil {
 		_ = out.Close()
 		_ = e.root.Remove(name)
 
@@ -238,16 +273,59 @@ func (e *extractor) file(name string, file *zip.File, mode os.FileMode) {
 	}
 }
 
-// copyContent writes an entry's data; the archive's CRC is checked at its end.
-func copyContent(out io.Writer, file *zip.File) error {
-	content, err := file.Open()
-	if err != nil {
-		return fmt.Errorf("cannot open entry: %w", err)
+// content opens an entry's data. An encrypted entry would open and inflate
+// as garbage, so it is refused here, as is a method with no decompressor.
+func content(file *zip.File) (io.ReadCloser, error) {
+	if file.Flags&encryptedFlag != 0 {
+		return nil, errPassword
 	}
 
-	defer func() { _ = content.Close() }() // read-only: a close error carries nothing
+	data, err := file.Open()
+	if errors.Is(err, zip.ErrAlgorithm) {
+		return nil, fmt.Errorf("%w %d", errMethod, file.Method)
+	}
 
-	if _, err := io.Copy(out, content); err != nil { // #nosec G110 -- extracting the entry is the command
+	if err != nil {
+		return nil, fmt.Errorf("cannot open entry: %w", err)
+	}
+
+	return data, nil
+}
+
+// skipped writes Info-ZIP's line for an entry it skips, under the name the
+// archive has for it, and is the status that leaves the run with: none for
+// any other error. Quiet drops the line for a method, never the password's.
+func skipped(out io.Writer, name string, err error, quiet bool) int {
+	switch {
+	case errors.Is(err, errPassword):
+		fmt.Fprintf(out, "%11s: %-22s  %v\n", "skipping", name, err)
+
+		return ExitPassword
+	case errors.Is(err, errMethod):
+		if !quiet {
+			fmt.Fprintf(out, "%11s: %-22s  %v\n", "skipping", name, err)
+		}
+
+		return ExitUnsupported
+	default:
+		return ExitOK
+	}
+}
+
+// copyContent writes an entry's data; the archive's CRC is checked at its end.
+func copyContent(out io.Writer, file *zip.File) error {
+	data, err := content(file)
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = data.Close() }() // read-only: a close error carries nothing
+
+	return copyData(out, data)
+}
+
+func copyData(out io.Writer, data io.Reader) error {
+	if _, err := io.Copy(out, data); err != nil { // #nosec G110 -- extracting the entry is the command
 		if errors.Is(err, zip.ErrChecksum) {
 			return errors.New("bad CRC") //nolint:err113 // Info-ZIP's words
 		}
@@ -259,23 +337,21 @@ func copyContent(out io.Writer, file *zip.File) error {
 }
 
 func (e *extractor) symlink(name string, file *zip.File) {
-	if !e.parents(name) || e.exists(name) {
+	data, ok := e.open(name, file)
+	if !ok {
 		return
 	}
 
-	content, err := file.Open()
-	if err != nil {
-		e.errorf("%s:  cannot open entry: %v", e.display(name), err)
-
-		return
-	}
-
-	target, err := io.ReadAll(io.LimitReader(content, linkTargetCap))
-	_ = content.Close()
+	target, err := io.ReadAll(io.LimitReader(data, linkTargetCap))
+	_ = data.Close()
 
 	if err != nil {
 		e.errorf("%s:  %v", e.display(name), err)
 
+		return
+	}
+
+	if !e.parents(name) || e.exists(name) {
 		return
 	}
 
