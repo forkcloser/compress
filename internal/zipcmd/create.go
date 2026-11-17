@@ -238,12 +238,25 @@ func walk(dir string, visit func(fsPath string, err error)) {
 }
 
 // add appends one input under its archive name, or skips it: the archive
-// itself, a directory under -D or -j, a name that would escape the
-// archive's root.
+// itself, what is neither a directory nor a regular file, a directory
+// under -D or -j, a name that would escape the archive's root.
 func (c *creator) add(entries []entry, fsPath string, info fs.FileInfo) []entry {
 	// By identity, not by name: -r over the directory the archive is in
 	// meets it under another spelling, and would nest it once more each run.
 	if os.SameFile(c.self, info) {
+		return entries
+	}
+
+	// Never opened: a FIFO blocks the open until something writes to it,
+	// and a device may have no end to read to.
+	switch mode := info.Mode(); {
+	case mode&fs.ModeNamedPipe != 0:
+		c.warnf("ignoring FIFO (Named Pipe): %s", fsPath)
+
+		return entries
+	case !mode.IsDir() && !mode.IsRegular():
+		c.warnf("ignoring special file: %s", fsPath)
+
 		return entries
 	}
 
