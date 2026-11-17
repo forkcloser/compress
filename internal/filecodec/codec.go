@@ -41,6 +41,8 @@ type Format struct {
 	// Warning is the exit status after a warning alone: ExitWarning for
 	// gzip and xz, ExitError for zstd, which has no status between the two.
 	Warning int
+	// Links is when the tool skips an input that is a link.
+	Links Links
 	// Compress wraps w in the format's encoder at level; the header fields
 	// name the original file where the format records it (gzip), empty for
 	// standard input or --no-name.
@@ -58,6 +60,23 @@ type Format struct {
 	// Help is the --help text.
 	Help string
 }
+
+// Links is when, without --force, a tool skips an input that is a symbolic
+// link or a file with other names: the result would stand in for a name
+// that is not the whole of the file.
+type Links int
+
+const (
+	// LinksWhereRemoved is xz's: either is skipped only where the input
+	// would be removed; --keep, --stdout and --test read it.
+	LinksWhereRemoved Links = iota + 1
+	// LinksToFile is gzip's: either is skipped where the result is a file,
+	// kept or not; --stdout and --test read it.
+	LinksToFile
+	// LinksSymbolic is zstd's: a symbolic link is skipped wherever the
+	// result goes, and a file with other names is read as any file.
+	LinksSymbolic
+)
 
 // Header is what a format may record about the original file.
 type Header struct {
@@ -458,16 +477,8 @@ func (r *runner) file(name string) {
 		return
 	}
 
-	info, err := os.Stat(name)
-	if err != nil {
-		r.failf("%s: %v", name, reason(err))
-
-		return
-	}
-
-	if !info.Mode().IsRegular() {
-		r.warnf("%s: %v -- ignored", name, errNotRegular)
-
+	info, ok := r.input(name)
+	if !ok {
 		return
 	}
 
@@ -478,6 +489,68 @@ func (r *runner) file(name string) {
 	}
 
 	r.toFile(name, info)
+}
+
+// input is the file name names, when it is one this invocation reads: a
+// regular file, behind a symbolic link or under several names only where
+// the tool takes those.
+func (r *runner) input(name string) (os.FileInfo, bool) {
+	// Lstat: Stat would answer for the file a symbolic link names.
+	info, err := os.Lstat(name)
+	if err != nil {
+		r.failf("%s: %v", name, reason(err))
+
+		return nil, false
+	}
+
+	if info.Mode()&os.ModeSymlink != 0 {
+		if r.skipsLink(true) {
+			r.warnf("%s: is a symbolic link -- ignored", name)
+
+			return nil, false
+		}
+
+		if info, err = os.Stat(name); err != nil {
+			r.failf("%s: %v", name, reason(err))
+
+			return nil, false
+		}
+	}
+
+	if !info.Mode().IsRegular() {
+		r.warnf("%s: %v -- ignored", name, errNotRegular)
+
+		return nil, false
+	}
+
+	if hardLinked(info) && r.skipsLink(false) {
+		r.warnf("%s: has other links -- unchanged", name)
+
+		return nil, false
+	}
+
+	return info, true
+}
+
+// skipsLink is whether this invocation leaves alone an input that is a
+// symbolic link, or else a file with other names.
+func (r *runner) skipsLink(symbolic bool) bool {
+	if r.opts.Force {
+		return false
+	}
+
+	toFile := !r.opts.Stdout && !r.opts.Test
+
+	switch r.format.Links {
+	case LinksWhereRemoved:
+		return toFile && !r.opts.Keep
+	case LinksToFile:
+		return toFile
+	case LinksSymbolic:
+		return symbolic
+	}
+
+	return false
 }
 
 // vacate is --force making room at the counterpart's name: what holds it

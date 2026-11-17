@@ -18,7 +18,7 @@ Compress or uncompress FILEs (by default, compress FILES in-place).
 
   -c, --stdout      write on standard output, keep original files unchanged
   -d, --decompress  decompress
-  -f, --force       force overwrite of output file
+  -f, --force       force overwrite of output file and compress links
   -k, --keep        keep (don't delete) input files
   -n, --no-name     do not save or restore the original name and timestamp
   -N, --name        save or restore the original name and timestamp
@@ -42,6 +42,7 @@ func Format() *filecodec.Format {
 		MaxLevel:      9,
 		DefaultLevel:  6,
 		Warning:       filecodec.ExitWarning,
+		Links:         filecodec.LinksToFile,
 		Abbreviations: true,
 		Compress: func(w io.Writer, level int, header filecodec.Header) (io.WriteCloser, error) {
 			writer, err := kgzip.NewWriterLevel(w, level)
