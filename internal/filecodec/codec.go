@@ -111,6 +111,11 @@ type Options struct {
 	Files   []string
 }
 
+// ErrTrailingGarbage is what a Decompress reader returns, once it has
+// yielded the whole stream, for input after it that is no part of one: the
+// data stands and the file is a warning.
+var ErrTrailingGarbage = errors.New("trailing garbage ignored")
+
 var (
 	errUsage      = errors.New("usage")
 	errIsTerminal = errors.New("compressed data not written to a terminal; use -f to force")
@@ -482,9 +487,7 @@ func (r *runner) file(name string) {
 			out = io.Discard
 		}
 
-		if err := r.stream(r.stdin, out, Header{}); err != nil {
-			r.failf("(stdin): %v", err)
-		}
+		r.finish("(stdin)", r.stream(r.stdin, out, Header{}))
 
 		return
 	}
@@ -606,9 +609,24 @@ func (r *runner) toStream(name string, info os.FileInfo) {
 		out = io.Discard
 	}
 
-	if err := r.stream(source, out, r.header(name, info)); err != nil {
-		r.failf("%s: %v", name, err)
+	r.finish(name, r.stream(source, out, r.header(name, info)))
+}
+
+// finish reports how name's stream ended, and whether what it wrote
+// stands: it does after a decoder's warning.
+func (r *runner) finish(name string, err error) bool {
+	switch {
+	case err == nil:
+		return true
+	case errors.Is(err, ErrTrailingGarbage):
+		r.warnf("%s: %v", name, err)
+
+		return true
 	}
+
+	r.failf("%s: %v", name, err)
+
+	return false
 }
 
 // toFile compresses or decompresses name into its counterpart beside it,
@@ -643,12 +661,11 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 		return
 	}
 
-	if err := r.stream(source, out, r.header(name, info)); err != nil {
+	if !r.finish(name, r.stream(source, out, r.header(name, info))) {
 		_ = out.Close()
 		_ = os.Remove(target)
 
 		r.settle()
-		r.failf("%s: %v", name, err)
 
 		return
 	}
