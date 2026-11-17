@@ -226,10 +226,9 @@ func (f *Format) parse(name string, args []string) (*Options, error) {
 }
 
 // cluster applies a run of short options (the letters after one dash): a
-// run of digits is one level (zstd's -19 is nineteen, not one then nine), a
-// tool's own letter is its, the rest are shared. A letter that takes a
-// value takes the rest of the cluster or the next word; the result is how
-// many following words were consumed.
+// digit is a level, a tool's own letter is its, the rest are shared. A
+// letter that takes a value takes the rest of the cluster or the next word;
+// the result is how many following words were consumed.
 func (f *Format) cluster(opts *Options, letters string, following []string) (int, error) {
 	skip := 0
 
@@ -241,7 +240,7 @@ func (f *Format) cluster(opts *Options, letters string, following []string) (int
 		}
 
 		if isDigit(letter) {
-			digits := letters[i : i+digitRun(letters[i:])]
+			digits := f.levelDigits(letters[i:])
 			skip = len(digits) - 1
 
 			if err := f.setLevelText(opts, digits); err != nil {
@@ -274,6 +273,9 @@ func applyLetter(opts *Options, letter rune, extra Extra, isExtra bool) error {
 	return shortOption(opts, letter)
 }
 
+// maxDigit is the highest level one digit says.
+const maxDigit = 9
+
 func isDigit(r rune) bool {
 	return r >= '0' && r <= '9'
 }
@@ -286,6 +288,17 @@ func digitRun(s string) int {
 	}
 
 	return n
+}
+
+// levelDigits is the level letters start with. A run of digits is one
+// level only where levels run past one digit: zstd's -19 is nineteen, xz's
+// and gzip's is -1 then -9.
+func (f *Format) levelDigits(letters string) string {
+	if f.MaxLevel > maxDigit {
+		return letters[:digitRun(letters)]
+	}
+
+	return letters[:1]
 }
 
 // setLevelText applies a level given as digits; a run too long for an int
