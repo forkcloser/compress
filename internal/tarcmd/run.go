@@ -11,11 +11,14 @@ import (
 	"github.com/forkcloser/xos"
 )
 
-// Exit statuses, GNU tar's.
+// Exit statuses, GNU tar's, but for a usage error's.
 const (
-	ExitOK    = 0
-	ExitError = 2
-	ExitUsage = 64
+	ExitOK = 0
+	// ExitChanged is a tree that changed while it was archived: every
+	// member is in the archive, and one of them is not what the tree holds.
+	ExitChanged = 1
+	ExitError   = 2
+	ExitUsage   = 64
 )
 
 const helpText = `Usage: tar [OPTION...] [FILE]...
@@ -89,11 +92,11 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, version strin
 		return ExitOK
 	}
 
-	var failed bool
+	var failed, changed bool
 
 	switch opts.mode {
 	case modeCreate:
-		failed, err = create(opts, stdout, stderr)
+		failed, changed, err = create(opts, stdout, stderr)
 	case modeExtract:
 		failed, err = extract(opts, stdin, stdout, stderr)
 	case modeList:
@@ -113,6 +116,10 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, version strin
 		return ExitError
 	}
 
+	if changed {
+		return ExitChanged
+	}
+
 	return ExitOK
 }
 
@@ -130,16 +137,17 @@ func createWrap(opts *options) compression {
 	return compressNone
 }
 
-// create writes the archive to the -f file, or to stdout.
-func create(opts *options, stdout, stderr io.Writer) (bool, error) {
+// create writes the archive to the -f file, or to stdout. Its results are
+// whether a member failed and whether one changed as it was read.
+func create(opts *options, stdout, stderr io.Writer) (failed, changed bool, err error) {
 	out, verbose := stdout, stderr // on stdout, the archive; the names go where they do not corrupt it
 
 	var file *os.File
 
 	if opts.archive != "" && opts.archive != "-" {
-		created, err := xos.Create(opts.archive)
-		if err != nil {
-			return false, fmt.Errorf("%s: Cannot open: %w", opts.archive, errReason(err))
+		created, createErr := xos.Create(opts.archive)
+		if createErr != nil {
+			return false, false, fmt.Errorf("%s: Cannot open: %w", opts.archive, errReason(createErr))
 		}
 
 		defer func() { _ = created.Close() }() // the explicit close below is the one that reports
@@ -149,32 +157,32 @@ func create(opts *options, stdout, stderr io.Writer) (bool, error) {
 
 	compressor, err := openWriter(createWrap(opts), opts.program, out)
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 
 	archiver := &creator{opts: opts, writer: tar.NewWriter(compressor), verbose: verbose, stderr: stderr}
 
 	for _, m := range opts.members {
 		if err := archiver.addMember(m); err != nil {
-			return archiver.failed, err
+			return archiver.failed, archiver.changed, err
 		}
 	}
 
 	if err := archiver.writer.Close(); err != nil {
-		return archiver.failed, fmt.Errorf("Cannot write: %w", err)
+		return archiver.failed, archiver.changed, fmt.Errorf("Cannot write: %w", err)
 	}
 
 	if err := compressor.Close(); err != nil {
-		return archiver.failed, fmt.Errorf("Cannot write: %w", err)
+		return archiver.failed, archiver.changed, fmt.Errorf("Cannot write: %w", err)
 	}
 
 	if file != nil {
 		if err := file.Close(); err != nil {
-			return archiver.failed, fmt.Errorf("%s: Cannot close: %w", opts.archive, errReason(err))
+			return archiver.failed, archiver.changed, fmt.Errorf("%s: Cannot close: %w", opts.archive, errReason(err))
 		}
 	}
 
-	return archiver.failed, nil
+	return archiver.failed, archiver.changed, nil
 }
 
 // openArchive opens the archive to read, -f's file or stdin, through the

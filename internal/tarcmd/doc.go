@@ -18,7 +18,9 @@
 // name as the archive carries it, or a directory with everything under it;
 // one no entry carries is reported and the status is 2.
 //
-// Exit status is GNU's: 0, 2 after any error (a fatal one stops the run, a
-// per-member one is reported and the run goes on), 64 for a usage error.
+// Exit status is GNU's: 0, 1 when a file or a directory changed while it
+// was archived (it is reported, and the archive is whole), 2 after any
+// error (a fatal one stops the run, a per-member one is reported and the
+// run goes on); and 64 for a usage error.
 // Diagnostics go to standard error prefixed "tar: ".
 package tarcmd

@@ -572,9 +572,10 @@ func TestUsage(t *testing.T) {
 }
 
 // TestDirectoryChangedAsRead: a directory whose entries are not the same
-// once they are archived as when they were listed is reported, "directory
-// changed as we read it", and the run exits with failure: a name that came,
-// a name that went, a name that became another. The archive holds the first
+// once they are archived as when they were listed is reported, "file
+// changed as we read it" as GNU tar says of a directory too, and the run
+// exits with the status for that, 1: a name that came, a name that went, a
+// name that became another. The archive holds the first
 // listing and no entry failed, so nothing else would say that it is not
 // the tree. A name the run excludes is no part of the archive, and its
 // coming or going is not reported. The archive goes to a pipe: once the
@@ -651,10 +652,8 @@ func TestDirectoryChangedAsRead(t *testing.T) {
 			}
 
 			got := <-status
-			said := strings.Contains(diag.String(), "tree: directory changed as we read it")
-
-			if tc.said && (got != tarcmd.ExitError || !said) {
-				t.Errorf("status %d, %q; want a failure that names the directory", got, diag.String())
+			if tc.said && (got != tarcmd.ExitChanged || diag.String() != "tar: tree: file changed as we read it\n") {
+				t.Errorf("status %d, %q; want the status of a change, and the directory named", got, diag.String())
 			}
 
 			if !tc.said && (got != tarcmd.ExitOK || diag.Len() != 0) {
