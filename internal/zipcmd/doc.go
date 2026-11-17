@@ -5,9 +5,10 @@
 // zip [-options] archive [input ...]: each input is stored under its path
 // with the leading "./" and "/" removed, a directory as its own entry and,
 // with -r, everything under it. An archive that exists is updated: an input
-// replaces the entry of its name, the rest are kept. Options: -r, -q, -0
-// through -9, -X, -@, -o, -j, -D, -h, -v. An archive named "-" is written
-// to standard output. Symbolic links are followed, as Info-ZIP does without
+// replaces the entry of its name, or leaves it as it is when the input
+// cannot be read; the rest are kept. Options: -r, -q, -0 through -9, -X,
+// -@, -o, -j, -D, -h, -v. An archive named "-" is written to standard
+// output. Symbolic links are followed, as Info-ZIP does without
 // -y, except that -r does not walk into a link to a directory. A file that
 // deflate does not shrink is deflated all the same, where
 // Info-ZIP would store it. Anything else is a usage error.

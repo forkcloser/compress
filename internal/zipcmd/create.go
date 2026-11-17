@@ -323,21 +323,27 @@ func (c *creator) write(out io.Writer, existing *zip.ReadCloser, entries []entry
 
 	done := make([]bool, len(entries))
 
+	var kept []*zip.File
 	if existing != nil {
-		for _, file := range existing.File {
-			if i, ok := replacing[file.Name]; ok {
-				done[i] = true
+		kept = existing.File
+	}
 
-				c.store(writer, entries[i], "updating")
+	for _, file := range kept {
+		if i, ok := replacing[file.Name]; ok {
+			done[i] = true
 
+			if c.store(writer, entries[i], "updating") {
 				continue
 			}
 
-			c.noteTime(file.Modified)
+			// The entry is all the archive has of that input: it stays.
+			c.warnf("will just copy entry over: %s", file.Name)
+		}
 
-			if err := writer.Copy(file); err != nil {
-				return c.errorf(ExitCreate, "Output file write failure (%v)", err)
-			}
+		c.noteTime(file.Modified)
+
+		if err := writer.Copy(file); err != nil {
+			return c.errorf(ExitCreate, "Output file write failure (%v)", err)
 		}
 	}
 
@@ -357,8 +363,9 @@ func (c *creator) write(out io.Writer, existing *zip.ReadCloser, entries []entry
 }
 
 // store writes one entry, opening a file before its header so that an input
-// that cannot be read leaves no trace in the archive.
-func (c *creator) store(writer *zip.Writer, item entry, verb string) {
+// that cannot be read leaves no trace in the archive, and reports false for
+// such an input: nothing was written under its name.
+func (c *creator) store(writer *zip.Writer, item entry, verb string) bool {
 	var source *os.File
 
 	if !item.info.IsDir() {
@@ -369,7 +376,7 @@ func (c *creator) store(writer *zip.Writer, item entry, verb string) {
 			c.warnf("could not open for reading: %s", item.path)
 			c.status = ExitInput
 
-			return
+			return false
 		}
 
 		defer func() { _ = source.Close() }() // read-only: a close error carries nothing
@@ -382,20 +389,22 @@ func (c *creator) store(writer *zip.Writer, item entry, verb string) {
 		c.warnf("could not write %s: %v", item.name, err)
 		c.status = ExitCreate
 
-		return
+		return true
 	}
 
 	c.flush()
 	c.pending = &pendingEntry{verb: verb, header: header}
 
 	if source == nil {
-		return
+		return true
 	}
 
 	if _, err := io.Copy(content, source); err != nil {
 		c.warnf("could not read %s: %v", item.path, err)
 		c.status = ExitInput
 	}
+
+	return true
 }
 
 // header is an entry's: Info-ZIP's unix attributes, stored for a directory
