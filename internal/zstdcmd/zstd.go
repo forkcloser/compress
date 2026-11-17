@@ -4,6 +4,8 @@
 package zstdcmd
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
 
@@ -35,6 +37,8 @@ const (
 	maxLevel     = 19
 	defaultLevel = 3
 )
+
+var errEmpty = errors.New("unexpected end of file")
 
 // Format is the zstd tool.
 func Format() *filecodec.Format {
@@ -74,7 +78,14 @@ func Format() *filecodec.Format {
 			return writer, nil
 		},
 		Decompress: func(r io.Reader) (io.ReadCloser, error) {
-			reader, err := zstd.NewReader(r)
+			// The decoder takes no frame at all for a whole stream of
+			// nothing.
+			source := bufio.NewReader(r)
+			if _, err := source.Peek(1); errors.Is(err, io.EOF) {
+				return nil, errEmpty
+			}
+
+			reader, err := zstd.NewReader(source)
 			if err != nil {
 				return nil, fmt.Errorf("zstd decoder: %w", err)
 			}
