@@ -4,15 +4,16 @@
 // With no file, or "-", the command filters standard input to standard
 // output. With files, each is compressed to its name plus the format's
 // suffix, or decompressed to its name without it, the result taking the
-// original's mode and modification time, and the original is removed
-// unless --keep or --stdout (zstd keeps it unless --rm). An existing result
-// is not overwritten without --force; compressed data is not written to a
-// terminal without --force. Nor, without --force, is an input taken that is
-// a symbolic link or, for xz and gzip, a file with other names: gzip skips
-// it where the result is a file, xz only where it would then be removed,
-// zstd skips the symbolic link wherever the result goes. A run that a
-// signal ends while it writes a result removes what it wrote of it and
-// leaves the original.
+// original's mode and modification time (under gzip's --name a decompressed
+// file takes the name and time its stream records), and the original is
+// removed unless --keep or --stdout (zstd keeps it unless --rm). An
+// existing result is not overwritten without --force; compressed data is
+// not written to a terminal without --force. Nor, without --force, is an
+// input taken that is a symbolic link or, for xz and gzip, a file with
+// other names: gzip skips it where the result is a file, xz only where it
+// would then be removed, zstd skips the symbolic link wherever the result
+// goes. A run that a signal ends while it writes a result removes what it
+// wrote of it and leaves the original.
 //
 // Exit status is the tools': 0, 1 after an error, and after a warning alone
 // (a file skipped for its suffix or for being a link, an existing result

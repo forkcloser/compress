@@ -92,6 +92,19 @@ func (m *members) next() error {
 
 // Format is the gzip tool.
 func Format() *filecodec.Format {
+	// The last of -n and -N decides both directions: what is saved on
+	// compression, what is restored on decompression.
+	noName := filecodec.Extra{Apply: func(o *filecodec.Options, _ string) error {
+		o.NoName, o.Name = true, false
+
+		return nil
+	}}
+	name := filecodec.Extra{Apply: func(o *filecodec.Options, _ string) error {
+		o.NoName, o.Name = false, true
+
+		return nil
+	}}
+
 	return &filecodec.Format{
 		Name:          "gzip",
 		Suffix:        ".gz",
@@ -129,11 +142,25 @@ func Format() *filecodec.Format {
 
 			return &members{source: source, member: member}, nil
 		},
+		Original: func(r io.Reader) (filecodec.Header, error) {
+			member, err := kgzip.NewReader(r)
+			if err != nil {
+				return filecodec.Header{}, fmt.Errorf("not in gzip format: %w", err)
+			}
+
+			defer func() { _ = member.Close() }() // read-only: a close error carries nothing
+
+			// The zero time is the header's "no time", not an instant.
+			original := filecodec.Header{Name: member.Name}
+			if !member.ModTime.IsZero() {
+				original.ModTime = member.ModTime.Unix()
+			}
+
+			return original, nil
+		},
 		Extra: map[string]filecodec.Extra{
-			"n":       {Apply: func(o *filecodec.Options, _ string) error { o.NoName = true; return nil }},
-			"no-name": {Apply: func(o *filecodec.Options, _ string) error { o.NoName = true; return nil }},
-			"N":       {Apply: func(o *filecodec.Options, _ string) error { o.NoName = false; return nil }},
-			"name":    {Apply: func(o *filecodec.Options, _ string) error { o.NoName = false; return nil }},
+			"n": noName, "no-name": noName,
+			"N": name, "name": name,
 		},
 		Help: helpText,
 	}
