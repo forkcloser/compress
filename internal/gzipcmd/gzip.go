@@ -4,6 +4,8 @@
 package gzipcmd
 
 import (
+	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -32,6 +34,62 @@ Compress or uncompress FILEs (by default, compress FILES in-place).
 With no FILE, or when FILE is -, read standard input.
 `
 
+// magic is the byte every member begins with.
+const magic = 0x1f
+
+// members is a gzip file read one member at a time: what follows the last
+// and does not begin another is trailing garbage, where a reader of the
+// whole file takes it for a member that fails.
+type members struct {
+	source *bufio.Reader
+	member *kgzip.Reader
+}
+
+func (m *members) Read(p []byte) (int, error) {
+	for {
+		n, err := m.member.Read(p)
+		if n > 0 {
+			// The member keeps an error it had with these bytes for the
+			// next read.
+			return n, nil
+		}
+
+		if !errors.Is(err, io.EOF) {
+			return 0, err //nolint:wrapcheck // the decoder's words are the diagnostic
+		}
+
+		if err := m.next(); err != nil {
+			return 0, err
+		}
+	}
+}
+
+func (m *members) Close() error {
+	return m.member.Close() //nolint:wrapcheck // the decoder's words are the diagnostic
+}
+
+// next starts the member the input goes on with. It answers io.EOF where
+// the input ends, and filecodec.ErrTrailingGarbage where it goes on with a
+// byte no member begins with.
+func (m *members) next() error {
+	head, err := m.source.Peek(1)
+	if err != nil {
+		return err //nolint:wrapcheck // io.EOF is the reader's contract
+	}
+
+	if head[0] != magic {
+		return filecodec.ErrTrailingGarbage
+	}
+
+	if err := m.member.Reset(m.source); err != nil {
+		return err //nolint:wrapcheck // the decoder's words are the diagnostic
+	}
+
+	m.member.Multistream(false)
+
+	return nil
+}
+
 // Format is the gzip tool.
 func Format() *filecodec.Format {
 	return &filecodec.Format{
@@ -58,12 +116,18 @@ func Format() *filecodec.Format {
 			return writer, nil
 		},
 		Decompress: func(r io.Reader) (io.ReadCloser, error) {
-			reader, err := kgzip.NewReader(r)
+			// One buffer under every member: a member's own would take the
+			// bytes after it along.
+			source := bufio.NewReader(r)
+
+			member, err := kgzip.NewReader(source)
 			if err != nil {
 				return nil, fmt.Errorf("not in gzip format: %w", err)
 			}
 
-			return reader, nil
+			member.Multistream(false)
+
+			return &members{source: source, member: member}, nil
 		},
 		Extra: map[string]filecodec.Extra{
 			"n":       {Apply: func(o *filecodec.Options, _ string) error { o.NoName = true; return nil }},
