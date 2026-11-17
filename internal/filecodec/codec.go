@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"golang.org/x/term"
@@ -53,6 +54,9 @@ type Format struct {
 	Compress func(w io.Writer, level int, h Header) (io.WriteCloser, error)
 	// Decompress wraps r in the format's decoder.
 	Decompress func(r io.Reader) (io.ReadCloser, error)
+	// Original reads, at the start of a compressed stream, what it records
+	// of the file it was made from; nil where the format records nothing.
+	Original func(r io.Reader) (Header, error)
 	// Extra are the tool's own options beyond the shared ones: a short
 	// letter or a long name, each with whether it takes a value, applied
 	// to the options or refused.
@@ -105,7 +109,10 @@ type Options struct {
 	Test       bool
 	Level      int
 	// NoName leaves the original's name and time out of the stream (gzip -n).
-	NoName  bool
+	NoName bool
+	// Name gives a decompressed file the name and time its stream records
+	// (gzip -N).
+	Name    bool
 	Help    bool
 	Version bool
 	Files   []string
@@ -646,6 +653,13 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 
 	defer func() { _ = source.Close() }() // read-only: a close error carries nothing
 
+	target, when, err := r.restored(source, target, info.ModTime())
+	if err != nil {
+		r.failf("%s: %v", name, err)
+
+		return
+	}
+
 	if r.opts.Force && !r.vacate(target) {
 		return
 	}
@@ -683,7 +697,7 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 	// create above went through the umask), and its times; a failure on
 	// either is not worth losing the result over.
 	_ = os.Chmod(target, info.Mode().Perm())
-	_ = os.Chtimes(target, info.ModTime(), info.ModTime())
+	_ = os.Chtimes(target, when, when)
 
 	// Before the input goes: a signal from here on finds a whole counterpart,
 	// and removing it would leave neither file.
@@ -699,6 +713,36 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 	if err := os.Remove(name); err != nil {
 		r.failf("%s: %v", name, reason(err))
 	}
+}
+
+// restored is --name on decompression: the counterpart's name and time as
+// the stream records them, each left as it is where the stream records
+// none. The name comes from the stream, not from the caller: it is taken
+// without its directories, and only when it is one a file may have here.
+// The source is left at its start.
+func (r *runner) restored(source io.ReadSeeker, target string, when time.Time) (string, time.Time, error) {
+	if !r.opts.Decompress || !r.opts.Name || r.format.Original == nil {
+		return target, when, nil
+	}
+
+	original, err := r.format.Original(source)
+	if err != nil {
+		return "", when, err
+	}
+
+	if _, err := source.Seek(0, io.SeekStart); err != nil {
+		return "", when, reason(err)
+	}
+
+	if name := filepath.Base(original.Name); name != "." && filepath.IsLocal(name) {
+		target = filepath.Join(filepath.Dir(target), name)
+	}
+
+	if original.ModTime != 0 {
+		when = time.Unix(original.ModTime, 0)
+	}
+
+	return target, when, nil
 }
 
 // create makes the counterpart and hands it to the watcher in one step: an
