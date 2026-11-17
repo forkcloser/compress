@@ -25,6 +25,7 @@ import (
 	"io/fs"
 	"os"
 	"path"
+	"strings"
 
 	"github.com/forkcloser/compress/internal/codec"
 	"github.com/forkcloser/compress/internal/constants"
@@ -91,7 +92,10 @@ func (t *trackedWriter) Write(p []byte) (int, error) {
 // Untar extracts a tar archive from reader into root: its directories, with
 // the module's directory permissions, and its regular files, with the
 // module's file permissions; the archive's own modes are not applied, and
-// every other kind of entry, symlinks included, is skipped. Every create
+// every other kind of entry, symlinks included, is skipped. A sparse file
+// is not skipped and not extracted: it reads as its full size, its holes
+// as zeros, whatever little the archive carries of it, and an archive that
+// holds one is refused, ErrCorrupt, where it is met. Every create
 // goes through root, which confines it to the root's directory at the OS
 // level: an entry named to land outside, by "..", an absolute name or a
 // symlink in the tree, is refused by root, and that refusal, like any
@@ -124,12 +128,14 @@ func Untar(reader io.Reader, root *os.Root) error {
 func untarEntry(tarReader *tar.Reader, source *codec.Source, header *tar.Header, root *os.Root) error {
 	name := path.Clean(header.Name)
 
-	switch header.Typeflag {
-	case tar.TypeDir:
+	switch {
+	case sparse(header):
+		return fmt.Errorf("%w: %s: %w", ErrCorrupt, header.Name, errSparse)
+	case header.Typeflag == tar.TypeDir:
 		if err := root.MkdirAll(name, constants.DirPermissions); err != nil {
 			return fmt.Errorf("%w: mkdir %s: %w", ErrDestination, header.Name, err)
 		}
-	case tar.TypeReg:
+	case header.Typeflag == tar.TypeReg, header.Typeflag == tar.TypeCont:
 		if dir := path.Dir(name); dir != "." {
 			if err := root.MkdirAll(dir, constants.DirPermissions); err != nil {
 				return fmt.Errorf("%w: mkdir %s: %w", ErrDestination, dir, err)
@@ -144,6 +150,24 @@ func untarEntry(tarReader *tar.Reader, source *codec.Source, header *tar.Header,
 	}
 
 	return nil
+}
+
+var errSparse = errors.New("sparse file not supported")
+
+// sparse reports an entry stored as a map of its data and holes, in the old
+// GNU form or in one of the PAX ones.
+func sparse(header *tar.Header) bool {
+	if header.Typeflag == tar.TypeGNUSparse {
+		return true
+	}
+
+	for key := range header.PAXRecords {
+		if strings.HasPrefix(key, "GNU.sparse.") {
+			return true
+		}
+	}
+
+	return false
 }
 
 // extractFile writes the entry's content to name under root. A file whose
