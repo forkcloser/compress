@@ -193,6 +193,12 @@ func (r *reader) Read(p []byte) (int, error) {
 		return n, err //nolint:wrapcheck // nil or io.EOF
 	}
 
+	// A Read that Close cut short says that, not what its decoder made of
+	// being closed under it: the stream is not at fault.
+	if r.closed.Load() {
+		return n, errReadClosed
+	}
+
 	return n, r.source.Classify(err)
 }
 
