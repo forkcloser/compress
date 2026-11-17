@@ -15,9 +15,12 @@ import (
 // do not begin another are not the stream's. gzip writes the data, says
 // "trailing garbage ignored" and exits 2; --quiet takes the line and
 // leaves the status. To a file, the counterpart stands and the input is
-// removed. The zeros a tape block is padded with are such bytes. Input
-// that begins a member, by its first byte, and is not one is still an
-// error.
+// removed. Zeros to the end are not such bytes: a tape block is padded
+// with them, and gzip passes over them in silence; whatever comes after
+// zeros is garbage, a member too. The first of a member's two bytes is
+// garbage before a byte that is not the second; where the input ends on it
+// a member is cut short, an error, and input that begins with both bytes
+// and is no member is one too.
 func TestContractTrailingGarbageIsAWarning(t *testing.T) {
 	t.Parallel()
 
@@ -25,10 +28,23 @@ func TestContractTrailingGarbageIsAWarning(t *testing.T) {
 
 	const words = "gzip: (stdin): trailing garbage ignored\n"
 
+	for name, zeros := range map[string]string{"zero padding": strings.Repeat("\x00", 512), "one zero": "\x00"} {
+		for _, args := range []string{"-dc", "-t"} {
+			status, stdout, stderr := run(t, "gzip", []byte(compressed+zeros), args)
+			if status != filecodec.ExitOK || (args == "-dc" && stdout != payload) || stderr != "" {
+				t.Errorf("%s, %s: exit %d, stdout %q, stderr %q", name, args, status, stdout, stderr)
+			}
+		}
+	}
+
+	// After zeros, a member is garbage like anything else: padding ends
+	// the members.
 	for name, tail := range map[string]string{
-		"garbage":      "garbage!",
-		"one byte":     "x",
-		"zero padding": strings.Repeat("\x00", 512),
+		"garbage":                         "garbage!",
+		"one byte":                        "x",
+		"zeros, then garbage":             "\x00\x00x",
+		"zeros, then a member":            "\x00\x00" + compressed,
+		"a member's first byte, then not": "\x1fgarbage!",
 	} {
 		for members, want := range map[string]string{compressed: payload, compressed + compressed: payload + payload} {
 			status, stdout, stderr := run(t, "gzip", []byte(members+tail), "-dc")
@@ -65,9 +81,10 @@ func TestContractTrailingGarbageIsAWarning(t *testing.T) {
 	}
 
 	for name, tail := range map[string]string{
-		"the first byte of a member alone": "\x1f",
-		"a member cut in its header":       "\x1f\x8b\x08",
-		"a member's first byte, then not":  "\x1fgarbage!",
+		"a member cut after its first byte": "\x1f",
+		"a member cut in its header":        "\x1f\x8b\x08",
+		"a member's two bytes, then not":    "\x1f\x8bgarbage!",
+		"the two bytes of another format":   "\x1f\x9dgarbage!",
 	} {
 		status, stdout, stderr := run(t, "gzip", []byte(compressed+tail), "-dc")
 		if status != filecodec.ExitError || stdout != payload || stderr == "" {

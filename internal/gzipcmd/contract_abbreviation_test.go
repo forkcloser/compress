@@ -17,9 +17,11 @@ func TestContractPrefixIsResolvedAmongAllOfGzipsOptions(t *testing.T) {
 	t.Parallel()
 
 	for flag, want := range map[string]string{
-		"--s":         "option '--s' is ambiguous; possibilities: '--stdout' '--suffix'",
-		"--l":         "option '--l' is ambiguous; possibilities: '--license' '--list'",
-		"--r":         "unrecognized option '--recursive'",
+		"--s":         "option '--s' is ambiguous; possibilities: '--silent' '--stdout' '--suffix' '--synchronous'",
+		"--l":         "option '--l' is ambiguous; possibilities: '--license' '--list' '--lzw'",
+		"--r":         "option '--r' is ambiguous; possibilities: '--recursive' '--rsyncable'",
+		"--b":         "option '--b' is ambiguous; possibilities: '--best' '--bits'",
+		"--rec":       "unrecognized option '--recursive'",
 		"--a":         "unrecognized option '--ascii'",
 		"--list":      "unrecognized option '--list'",
 		"--suffix=.x": "unrecognized option '--suffix'",
@@ -38,7 +40,7 @@ func TestContractPrefixIsResolvedAmongAllOfGzipsOptions(t *testing.T) {
 		}
 	}
 
-	for _, flag := range []string{"--st", "--k", "--b", "--na"} {
+	for _, flag := range []string{"--st", "--k", "--be", "--na"} {
 		if got, _ := decode(t, []byte(mustRun(t, "gzip", []byte(payload), flag))); got != payload {
 			t.Errorf("gzip %s: %q", flag, got)
 		}

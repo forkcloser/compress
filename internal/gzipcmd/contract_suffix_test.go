@@ -12,8 +12,8 @@ import (
 )
 
 // TestContractSuffixedInputIsSkipped: gzip does not compress a file that
-// already has one of its suffixes: a warning, status 2, and nothing
-// written. --force compresses it.
+// already has one of its suffixes: it says so, writes nothing, and the
+// status is not touched, as GNU gzip's is not. --force compresses it.
 func TestContractSuffixedInputIsSkipped(t *testing.T) {
 	t.Parallel()
 
@@ -22,7 +22,7 @@ func TestContractSuffixedInputIsSkipped(t *testing.T) {
 		writeFile(t, file, payload)
 
 		status, _, stderr := run(t, "gzip", nil, "-k", file)
-		if status != filecodec.ExitWarning || !strings.Contains(stderr, "suffix -- unchanged") {
+		if status != filecodec.ExitOK || !strings.Contains(stderr, "suffix -- unchanged") {
 			t.Errorf("%s: exit %d, stderr %q", name, status, stderr)
 		}
 

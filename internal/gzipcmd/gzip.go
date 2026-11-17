@@ -34,8 +34,37 @@ Compress or uncompress FILEs (by default, compress FILES in-place).
 With no FILE, or when FILE is -, read standard input.
 `
 
-// magic is the byte every member begins with.
-const magic = 0x1f
+// A member begins with magic and the byte of its format: gzip's own, or one
+// of the four older ones gzip reads.
+const (
+	magic    = 0x1f
+	deflate  = 0x8b
+	oldGzip  = 0x9e
+	pack     = 0x1e
+	compress = 0x9d
+	lzh      = 0xa0
+)
+
+// begins reports whether head, the next bytes of the input, begins a member:
+// gzip's two bytes, or those of its old format, pack, compress or lzh, which
+// are not read here and are left to the decoder to refuse. The first byte
+// where the input ends begins one too, cut short there.
+func begins(head []byte) bool {
+	if len(head) == 0 || head[0] != magic {
+		return false
+	}
+
+	if len(head) == 1 {
+		return true
+	}
+
+	switch head[1] {
+	case deflate, oldGzip, pack, compress, lzh:
+		return true
+	default:
+		return false
+	}
+}
 
 // members is a gzip file read one member at a time: what follows the last
 // and does not begin another is trailing garbage, where a reader of the
@@ -69,15 +98,32 @@ func (m *members) Close() error {
 }
 
 // next starts the member the input goes on with. It answers io.EOF where
-// the input ends, and filecodec.ErrTrailingGarbage where it goes on with a
-// byte no member begins with.
+// the input ends, after zeros or not: gzip takes zeros after a member for
+// padding, of a tape's block say, and says nothing of them. It answers
+// filecodec.ErrTrailingGarbage where the input goes on with bytes no
+// member begins with, the first of a member's two before a byte that is
+// not the second among them, or with anything at all after zeros: padding
+// ends the members.
 func (m *members) next() error {
-	head, err := m.source.Peek(1)
-	if err != nil {
+	head, err := m.source.Peek(2)
+	if len(head) == 0 {
 		return err //nolint:wrapcheck // io.EOF is the reader's contract
 	}
 
-	if head[0] != magic {
+	if head[0] == 0 {
+		for {
+			padding, err := m.source.ReadByte()
+			if err != nil {
+				return err //nolint:wrapcheck // io.EOF is the reader's contract
+			}
+
+			if padding != 0 {
+				return filecodec.ErrTrailingGarbage
+			}
+		}
+	}
+
+	if !begins(head) {
 		return filecodec.ErrTrailingGarbage
 	}
 
@@ -106,18 +152,22 @@ func Format() *filecodec.Format {
 	}}
 
 	return &filecodec.Format{
-		Name:          "gzip",
-		Suffix:        ".gz",
-		Suffixes:      map[string]string{".gz": "", ".tgz": ".tar", ".taz": ".tar", "-gz": "", ".z": "", "-z": ""},
-		FoldSuffix:    true,
-		MinLevel:      1,
-		MaxLevel:      9,
-		DefaultLevel:  6,
-		Warning:       filecodec.ExitWarning,
-		Links:         filecodec.LinksToFile,
-		SkipSuffixed:  true,
-		Lacks:         []string{"z", "compress"},
-		Abbreviations: true,
+		Name:   "gzip",
+		Suffix: ".gz",
+		Suffixes: map[string]string{
+			".gz": "", ".tgz": ".tar", ".taz": ".tar", "-gz": "", ".z": "", "-z": "", "_z": "",
+		},
+		FoldSuffix:     true,
+		LinkFails:      true,
+		SuffixedIsFine: true,
+		MinLevel:       1,
+		MaxLevel:       9,
+		DefaultLevel:   6,
+		Warning:        filecodec.ExitWarning,
+		Links:          filecodec.LinksToFile,
+		SkipSuffixed:   true,
+		Lacks:          []string{"z", "compress"},
+		Abbreviations:  true,
 		Compress: func(w io.Writer, level int, header filecodec.Header) (io.WriteCloser, error) {
 			writer, err := kgzip.NewWriterLevel(w, level)
 			if err != nil {
@@ -165,8 +215,10 @@ func Format() *filecodec.Format {
 			"n": noName, "no-name": noName,
 			"N": name, "name": name,
 		},
-		Unsupported: []string{"ascii", "license", "list", "recursive", "suffix"},
-		Help:        helpText,
+		Unsupported: []string{
+			"ascii", "bits", "license", "list", "lzw", "recursive", "rsyncable", "silent", "suffix", "synchronous",
+		},
+		Help: helpText,
 	}
 }
 
