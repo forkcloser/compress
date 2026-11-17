@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -69,6 +70,9 @@ type Format struct {
 	// letter or a long name, each with whether it takes a value, applied
 	// to the options or refused.
 	Extra map[string]Extra
+	// Lacks are the shared options the tool does not have, short letters
+	// and long names: each is refused as an option it does not know.
+	Lacks []string
 	// Abbreviations is whether a long option may be given as any unambiguous
 	// prefix of its name, as getopt_long takes it for gzip and xz; zstd's
 	// own parser refuses one.
@@ -255,7 +259,7 @@ func (f *Format) cluster(opts *Options, letters string, following []string) (int
 			return extraWithValue(opts, letter, extra, letters[i+1:], following)
 		}
 
-		if err := applyLetter(opts, letter, extra, isExtra); err != nil {
+		if err := f.applyLetter(opts, letter, extra, isExtra); err != nil {
 			return 0, err
 		}
 	}
@@ -265,9 +269,13 @@ func (f *Format) cluster(opts *Options, letters string, following []string) (int
 
 // applyLetter applies one short option that takes no value: a tool's own
 // letter is its, the rest are shared.
-func applyLetter(opts *Options, letter rune, extra Extra, isExtra bool) error {
+func (f *Format) applyLetter(opts *Options, letter rune, extra Extra, isExtra bool) error {
 	if isExtra {
 		return extra.apply(opts, "")
+	}
+
+	if slices.Contains(f.Lacks, string(letter)) {
+		return fmt.Errorf("%w: invalid option -- '%c'", errUsage, letter)
 	}
 
 	return shortOption(opts, letter)
@@ -372,6 +380,10 @@ func (f *Format) long(opts *Options, spec string, following []string) (int, erro
 		return longExtra(opts, name, extra, value, hasValue, following)
 	}
 
+	if slices.Contains(f.Lacks, name) {
+		return 0, fmt.Errorf("%w: unrecognized option '--%s'", errUsage, name)
+	}
+
 	if hasValue {
 		return 0, fmt.Errorf("%w: option '--%s' doesn't allow an argument", errUsage, name)
 	}
@@ -416,9 +428,9 @@ func sharedLong() []string {
 }
 
 // resolveLong is the long option the given text names, among the shared
-// ones and the tool's own: a whole name, or the one it is a prefix of.
+// ones the tool has and its own: a whole name, or the one it is a prefix of.
 func (f *Format) resolveLong(given string) (string, error) {
-	names := sharedLong()
+	names := slices.DeleteFunc(sharedLong(), func(name string) bool { return slices.Contains(f.Lacks, name) })
 
 	for name := range f.Extra {
 		if utf8.RuneCountInString(name) > 1 {
