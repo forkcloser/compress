@@ -140,8 +140,9 @@ func openExisting(target string) (*zip.ReadCloser, error) {
 }
 
 // collect resolves the inputs to entries: a missing input is a warning, a
-// directory is its own entry and, with -r, everything under it; a name
-// stored twice is Info-ZIP's usage error.
+// directory is its own entry and, with -r, everything under it. An input
+// named again is stored once; two paths that map to one name are Info-ZIP's
+// usage error.
 func (c *creator) collect() ([]entry, error) {
 	var entries []entry
 
@@ -163,19 +164,35 @@ func (c *creator) collect() ([]entry, error) {
 	}
 
 	seen := make(map[string]string, len(entries))
+	kept := entries[:0]
 
 	for _, item := range entries {
-		if first, dup := seen[item.name]; dup {
+		first, dup := seen[item.name]
+		if !dup {
+			seen[item.name] = item.path
+			kept = append(kept, item)
+
+			continue
+		}
+
+		// The path as it was given, not the file it leads to: one file
+		// spelled two ways is refused, as Info-ZIP refuses it.
+		if spelling(first) != spelling(item.path) {
 			c.warnf("first full name: %s\n\tzip warning: second full name: %s\n\t"+
 				"zip warning: name in zip file repeated: %s", first, item.path, item.name)
 
 			return nil, errRepeated
 		}
-
-		seen[item.name] = item.path
 	}
 
-	return entries, nil
+	return kept, nil
+}
+
+// spelling is a path as two inputs are told apart by: a directory is the
+// same input with or without its trailing separator, and so is a path under
+// either separator where the platform takes both.
+func spelling(fsPath string) string {
+	return strings.TrimRight(filepath.FromSlash(fsPath), string(filepath.Separator))
 }
 
 // directory adds a directory: its own entry unless -D or -j, and with -r
