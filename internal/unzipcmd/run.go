@@ -66,20 +66,25 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 
 	defer func() { _ = reader.Close() }()
 
-	files, status := selectFiles(opts, reader.File, stdout)
-	if status != ExitOK && len(files) == 0 {
-		return status
+	files, unmatched := selectFiles(opts, reader.File)
+
+	// Members, and none of them left to work on: Info-ZIP's status 11, with
+	// no caution when each pattern did match a member that an exclude took.
+	left := ExitOK
+	if len(files) == 0 && len(reader.File) > 0 {
+		left = ExitNoMatch
 	}
 
 	switch {
 	case opts.list:
-		return list(files, stdout)
+		// A listing says nothing of a pattern.
+		return worse(list(files, stdout), left)
 	case opts.test:
-		return test(name, files, stdout, opts.quiet)
+		return test(name, files, unmatched, left, stdout, opts.quiet)
 	case opts.pipe:
-		return pipe(files, stdout, stderr)
+		return cautions(stderr, unmatched, worse(pipe(files, stdout, stderr), left))
 	default:
-		return extract(opts, files, stdout, stderr, status)
+		return cautions(stderr, unmatched, worse(extract(opts, files, stdout, stderr), left))
 	}
 }
 
@@ -118,46 +123,53 @@ func open(archive string, stdout, stderr io.Writer, quiet bool) (string, *zip.Re
 }
 
 // selectFiles is the entries to work on: those matching a member pattern
-// (all, with none given) and no exclude. A pattern matching nothing is
-// Info-ZIP's caution; none matching anything is its status 11.
-func selectFiles(opts *options, all []*zip.File, stdout io.Writer) ([]*zip.File, int) {
+// (all, with none given) and no exclude, and the patterns that matched
+// nothing. A pattern has matched once a member bears its name, excluded or
+// not: Info-ZIP looks at the excludes after.
+func selectFiles(opts *options, all []*zip.File) ([]*zip.File, []string) {
 	matched := make([]bool, len(opts.members))
 
 	var files []*zip.File
 
 	for _, file := range all {
-		if excluded(opts.excludes, file.Name) {
-			continue
-		}
-
-		if len(opts.members) == 0 {
-			files = append(files, file)
-
-			continue
-		}
+		wanted := len(opts.members) == 0
 
 		for i, pattern := range opts.members {
 			if match(pattern, file.Name) {
 				matched[i] = true
-
-				files = append(files, file)
+				wanted = true
 
 				break
 			}
 		}
-	}
 
-	status := ExitOK
-
-	for i, pattern := range opts.members {
-		if !matched[i] {
-			fmt.Fprintf(stdout, "caution: filename not matched:  %s\n", pattern)
-
-			status = ExitNoMatch
+		if wanted && !excluded(opts.excludes, file.Name) {
+			files = append(files, file)
 		}
 	}
 
-	return files, status
+	var unmatched []string
+
+	for i, pattern := range opts.members {
+		if !matched[i] {
+			unmatched = append(unmatched, pattern)
+		}
+	}
+
+	return files, unmatched
+}
+
+// cautions writes Info-ZIP's line for each pattern that matched nothing,
+// once the entries are done as it does, and is the run's status with them:
+// 11, unless an error is worse.
+func cautions(out io.Writer, unmatched []string, status int) int {
+	for _, pattern := range unmatched {
+		fmt.Fprintf(out, "caution: filename not matched:  %s\n", pattern)
+
+		status = worse(status, ExitNoMatch)
+	}
+
+	return status
 }
 
 func excluded(patterns []string, name string) bool {
@@ -171,7 +183,7 @@ func excluded(patterns []string, name string) bool {
 }
 
 // extract writes the selected entries under the directory, creating it.
-func extract(opts *options, files []*zip.File, stdout, stderr io.Writer, status int) int {
+func extract(opts *options, files []*zip.File, stdout, stderr io.Writer) int {
 	dir := opts.exdir
 	if dir == "" {
 		dir = "."
@@ -192,7 +204,7 @@ func extract(opts *options, files []*zip.File, stdout, stderr io.Writer, status 
 
 	defer func() { _ = root.Close() }()
 
-	run := &extractor{opts: opts, root: root, stdout: stdout, stderr: stderr, status: status}
+	run := &extractor{opts: opts, root: root, stdout: stdout, stderr: stderr}
 
 	for _, file := range files {
 		run.entry(file)

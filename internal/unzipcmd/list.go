@@ -28,8 +28,10 @@ func list(files []*zip.File, stdout io.Writer) int {
 
 // test is -t: every entry read through, its CRC checked at its end. An
 // entry skipped for its method is no error: it is counted apart from the
-// entries tested, and the status says so once nothing worse did.
-func test(name string, files []*zip.File, stdout io.Writer, quiet bool) int {
+// entries tested, and the status says so once nothing worse did. A pattern
+// that matched nothing is an error here, in the summary's words; left is
+// the status when the patterns and excludes left nothing to test.
+func test(name string, files []*zip.File, unmatched []string, left int, stdout io.Writer, quiet bool) int {
 	status := ExitOK
 	tested, unsupported := 0, 0
 
@@ -55,7 +57,13 @@ func test(name string, files []*zip.File, stdout io.Writer, quiet bool) int {
 		}
 	}
 
+	status = cautions(stdout, unmatched, status)
+
 	switch {
+	case status == ExitOK && left != ExitOK:
+		fmt.Fprintf(stdout, "Caution:  zero files tested in %s.\n", name)
+
+		status = left
 	case status != ExitOK:
 		fmt.Fprintf(stdout, "At least one error was detected in %s.\n", name)
 	case unsupported == 0:

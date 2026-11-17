@@ -15,6 +15,9 @@
 //
 // Exit status is Info-ZIP's: 0, 1 after a warning (an entry skipped), 2 when
 // an entry is damaged, 5 when one is encrypted, 9 when the archive cannot be
-// found or read, 10 for a usage error, 11 when no member matched, 81 when an
-// entry's method is not supported. Diagnostics go to standard error.
+// found or read, 10 for a usage error, 11 when a member pattern matched
+// nothing or the patterns and excludes left no member to work on, 81 when an
+// entry's method is not supported. Diagnostics go to standard error; what -t
+// finds in the archive, its cautions included, goes to standard output with
+// the rest of its lines, as Info-ZIP's does.
 package unzipcmd
