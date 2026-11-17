@@ -80,6 +80,10 @@ type Format struct {
 	// prefix of its name, as getopt_long takes it for gzip and xz; zstd's
 	// own parser refuses one.
 	Abbreviations bool
+	// Unsupported are the tool's long options this command does not take.
+	// A prefix is resolved among them too: what is ambiguous for the tool
+	// is ambiguous here, and never the one option of this subset it begins.
+	Unsupported []string
 	// Help is the --help text.
 	Help string
 }
@@ -430,10 +434,11 @@ func sharedLong() []string {
 	}
 }
 
-// resolveLong is the long option the given text names, among the shared
-// ones the tool has and its own: a whole name, or the one it is a prefix of.
+// resolveLong is the long option the given text names, among all the tool
+// has, taken here or not: a whole name, or the one it is a prefix of.
 func (f *Format) resolveLong(given string) (string, error) {
 	names := slices.DeleteFunc(sharedLong(), func(name string) bool { return slices.Contains(f.Lacks, name) })
+	names = append(names, f.Unsupported...)
 
 	for name := range f.Extra {
 		if utf8.RuneCountInString(name) > 1 {
