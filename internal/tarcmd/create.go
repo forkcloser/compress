@@ -25,6 +25,11 @@ type creator struct {
 	verbose io.Writer // where -v prints names: stdout, or stderr when the archive is stdout
 	stderr  io.Writer
 
+	// given is the command-line member being archived, as it was named,
+	// and base the archive name it got: --exclude matches a name as the
+	// member gave it, before its leading slash was removed.
+	given, base string
+
 	warnedLeadingSlash bool
 	failed             bool
 }
@@ -79,7 +84,9 @@ func readList(file string) ([]string, error) {
 // forward, a leading slash removed with a warning the first time.
 func (c *creator) add(dir, name string) error {
 	archiveName := c.archiveName(name)
-	if excluded(c.opts.excludes, archiveName) {
+
+	c.given, c.base = strings.TrimRight(filepath.ToSlash(name), "/"), archiveName
+	if c.excludes(archiveName) {
 		return nil
 	}
 
@@ -97,6 +104,12 @@ func (c *creator) add(dir, name string) error {
 	}
 
 	return c.addPath(fsPath, archiveName, info)
+}
+
+// excludes reports whether --exclude leaves out the entry that gets
+// archiveName, the member being archived or a name under it.
+func (c *creator) excludes(archiveName string) bool {
+	return excluded(c.opts.excludes, c.given+archiveName[len(c.base):])
 }
 
 // archiveName turns a command-line name into the member name: forward
@@ -216,7 +229,7 @@ func (c *creator) addChildren(fsPath, archiveName string) error {
 		// Not path.Join: it would clean "./sub" to "sub", and the names are
 		// kept as the member was given.
 		childName := archiveName + "/" + entry.Name()
-		if excluded(c.opts.excludes, childName) {
+		if c.excludes(childName) {
 			continue
 		}
 
@@ -266,7 +279,7 @@ func (c *creator) archived(archiveName string, entries []os.DirEntry) []string {
 	names := make([]string, 0, len(entries))
 
 	for _, entry := range entries {
-		if !excluded(c.opts.excludes, archiveName+"/"+entry.Name()) {
+		if !c.excludes(archiveName + "/" + entry.Name()) {
 			names = append(names, entry.Name())
 		}
 	}
