@@ -7,10 +7,13 @@
 // original's mode and modification time, and the original is removed
 // unless --keep or --stdout (zstd keeps it unless --rm). An existing result
 // is not overwritten without --force; compressed data is not written to a
-// terminal without --force.
+// terminal without --force. Nor, without --force, is an input taken that is
+// a symbolic link or, for xz and gzip, a file with other names: gzip skips
+// it where the result is a file, xz only where it would then be removed,
+// zstd skips the symbolic link wherever the result goes.
 //
 // Exit status is the tools': 0, 1 after an error, and after a warning alone
-// (a file skipped for its suffix, an existing result left alone) the tool's
-// own: 2 for xz and gzip, 1 for zstd. Diagnostics go to standard error
+// (a file skipped for its suffix or for being a link, an existing result
+// left alone) the tool's own: 2 for xz and gzip, 1 for zstd. Diagnostics go to standard error
 // prefixed with the tool's name.
 package filecodec
