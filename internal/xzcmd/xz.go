@@ -63,7 +63,7 @@ func Format() *filecodec.Format {
 	return &filecodec.Format{
 		Name:          "xz",
 		Suffix:        ".xz",
-		Suffixes:      map[string]string{".xz": "", ".txz": ".tar", ".lzma": "", ".tlz": ".tar"},
+		Suffixes:      map[string]string{".xz": "", ".txz": ".tar"},
 		MinLevel:      0,
 		MaxLevel:      9,
 		DefaultLevel:  6,
