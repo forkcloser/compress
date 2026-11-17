@@ -19,5 +19,8 @@
 // (a file skipped for its suffix or for being a link, an existing result
 // left alone, input that goes on after the end of a gzip stream) the tool's
 // own: 2 for xz and gzip, 1 for zstd. For xz an existing result is an
-// error. Diagnostics go to standard error prefixed with the tool's name.
+// error. For gzip, as for GNU gzip, a symbolic link is one too, a file
+// that already has the suffix is said and leaves the status alone, and
+// zeros from a stream's end to the input's are padding, not said at all. Diagnostics go to
+// standard error prefixed with the tool's name.
 package filecodec

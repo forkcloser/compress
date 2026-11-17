@@ -52,6 +52,12 @@ type Format struct {
 	Warning int
 	// Links is when the tool skips an input that is a link.
 	Links Links
+	// LinkFails is whether a symbolic link the tool skips is an error to
+	// it, as to gzip, which fails to open it, and not a warning.
+	LinkFails bool
+	// SuffixedIsFine is whether a file skipped for having the tool's suffix
+	// leaves the status alone, as gzip's does: it is said, and no more.
+	SuffixedIsFine bool
 	// SkipSuffixed is whether a file that already has one of the tool's
 	// suffixes is left uncompressed without --force: gzip and xz skip it,
 	// zstd compresses it again.
@@ -521,6 +527,13 @@ func (r *runner) warnf(format string, args ...any) {
 	}
 }
 
+// notef says what a warning would, and leaves the status alone.
+func (r *runner) notef(format string, args ...any) {
+	if !r.opts.Quiet {
+		fmt.Fprintf(r.stderr, r.format.Name+": "+format+"\n", args...)
+	}
+}
+
 func (r *runner) failf(format string, args ...any) {
 	r.status = ExitError
 
@@ -568,7 +581,11 @@ func (r *runner) input(name string) (os.FileInfo, bool) {
 
 	if info.Mode()&os.ModeSymlink != 0 {
 		if r.skipsLink(true) {
-			r.warnf("%s: is a symbolic link -- ignored", name)
+			if r.format.LinkFails {
+				r.failf("%s: Too many levels of symbolic links", name)
+			} else {
+				r.warnf("%s: is a symbolic link -- ignored", name)
+			}
 
 			return nil, false
 		}
@@ -849,8 +866,12 @@ func (r *runner) watch() func() {
 // it on decompression, where a name with no known suffix is skipped.
 func (r *runner) target(name string) (string, bool) {
 	if !r.opts.Decompress {
-		if _, known := r.suffix(name); known && r.format.SkipSuffixed && !r.opts.Force {
-			r.warnf("%s already has the %s suffix -- unchanged", name, r.format.Suffix)
+		if suffix, known := r.suffix(name); known && r.format.SkipSuffixed && !r.opts.Force {
+			if r.format.SuffixedIsFine {
+				r.notef("%s already has %s suffix -- unchanged", name, suffix)
+			} else {
+				r.warnf("%s already has the %s suffix -- unchanged", name, r.format.Suffix)
+			}
 
 			return "", false
 		}
@@ -866,7 +887,13 @@ func (r *runner) target(name string) (string, bool) {
 		return "", false
 	}
 
-	return strings.TrimSuffix(name, suffix) + r.format.Suffixes[suffix], true
+	// The suffix is as the name writes it, which the table may not be.
+	replacement := r.format.Suffixes[suffix]
+	if r.format.FoldSuffix {
+		replacement = r.format.Suffixes[strings.ToLower(suffix)]
+	}
+
+	return strings.TrimSuffix(name, suffix) + replacement, true
 }
 
 // suffix is the known compressed suffix name ends with, the longest first.

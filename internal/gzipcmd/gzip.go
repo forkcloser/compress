@@ -69,12 +69,28 @@ func (m *members) Close() error {
 }
 
 // next starts the member the input goes on with. It answers io.EOF where
-// the input ends, and filecodec.ErrTrailingGarbage where it goes on with a
-// byte no member begins with.
+// the input ends, after zeros or not: gzip takes zeros after a member for
+// padding, of a tape's block say, and says nothing of them. It answers
+// filecodec.ErrTrailingGarbage where the input goes on with a byte no
+// member begins with, or with anything at all after zeros: padding ends
+// the members.
 func (m *members) next() error {
 	head, err := m.source.Peek(1)
 	if err != nil {
 		return err //nolint:wrapcheck // io.EOF is the reader's contract
+	}
+
+	if head[0] == 0 {
+		for {
+			padding, err := m.source.ReadByte()
+			if err != nil {
+				return err //nolint:wrapcheck // io.EOF is the reader's contract
+			}
+
+			if padding != 0 {
+				return filecodec.ErrTrailingGarbage
+			}
+		}
 	}
 
 	if head[0] != magic {
@@ -106,18 +122,22 @@ func Format() *filecodec.Format {
 	}}
 
 	return &filecodec.Format{
-		Name:          "gzip",
-		Suffix:        ".gz",
-		Suffixes:      map[string]string{".gz": "", ".tgz": ".tar", ".taz": ".tar", "-gz": "", ".z": "", "-z": ""},
-		FoldSuffix:    true,
-		MinLevel:      1,
-		MaxLevel:      9,
-		DefaultLevel:  6,
-		Warning:       filecodec.ExitWarning,
-		Links:         filecodec.LinksToFile,
-		SkipSuffixed:  true,
-		Lacks:         []string{"z", "compress"},
-		Abbreviations: true,
+		Name:   "gzip",
+		Suffix: ".gz",
+		Suffixes: map[string]string{
+			".gz": "", ".tgz": ".tar", ".taz": ".tar", "-gz": "", ".z": "", "-z": "", "_z": "",
+		},
+		FoldSuffix:     true,
+		LinkFails:      true,
+		SuffixedIsFine: true,
+		MinLevel:       1,
+		MaxLevel:       9,
+		DefaultLevel:   6,
+		Warning:        filecodec.ExitWarning,
+		Links:          filecodec.LinksToFile,
+		SkipSuffixed:   true,
+		Lacks:          []string{"z", "compress"},
+		Abbreviations:  true,
 		Compress: func(w io.Writer, level int, header filecodec.Header) (io.WriteCloser, error) {
 			writer, err := kgzip.NewWriterLevel(w, level)
 			if err != nil {
@@ -165,8 +185,10 @@ func Format() *filecodec.Format {
 			"n": noName, "no-name": noName,
 			"N": name, "name": name,
 		},
-		Unsupported: []string{"ascii", "license", "list", "recursive", "suffix"},
-		Help:        helpText,
+		Unsupported: []string{
+			"ascii", "bits", "license", "list", "lzw", "recursive", "rsyncable", "silent", "suffix", "synchronous",
+		},
+		Help: helpText,
 	}
 }
 

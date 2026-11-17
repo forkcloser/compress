@@ -20,8 +20,10 @@ import (
 func TestContractLinkedInputIsLeftAlone(t *testing.T) {
 	t.Parallel()
 
+	// GNU gzip fails to open a symbolic link, an error, and skips a file
+	// with other names, a warning.
 	for kind, words := range map[string]string{
-		"symbolic": "is a symbolic link -- ignored",
+		"symbolic": "Too many levels of symbolic links",
 		"hard":     "has other links -- unchanged",
 	} {
 		t.Run(kind, func(t *testing.T) {
@@ -55,7 +57,13 @@ func TestContractLinkedInputIsLeftAlone(t *testing.T) {
 
 			for _, args := range [][]string{{link}, {"-k", link}, {"-d", other}, {"-dk", other}} {
 				status, _, stderr := run(t, "gzip", nil, args...)
-				if status != filecodec.ExitWarning || !strings.Contains(stderr, words) {
+
+				want := filecodec.ExitWarning
+				if kind == "symbolic" {
+					want = filecodec.ExitError
+				}
+
+				if status != want || !strings.Contains(stderr, words) {
 					t.Errorf("gzip %v: exit %d, stderr %q", args, status, stderr)
 				}
 			}
