@@ -12,6 +12,8 @@ import (
 	"sync"
 	"unicode/utf8"
 
+	"golang.org/x/term"
+
 	"github.com/forkcloser/xos"
 
 	"github.com/forkcloser/compress/internal/longopt"
@@ -826,19 +828,12 @@ func (r *runner) stream(source io.Reader, out io.Writer, header Header) error {
 	return encoder.Close() //nolint:wrapcheck // the encoder's words are the diagnostic
 }
 
-// isTerminal: the writer is a character device, a terminal in practice.
+// isTerminal: the writer is a terminal, not any character device: the
+// null device is one, and takes compressed data like a file.
 func isTerminal(w io.Writer) bool {
 	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
 
-	info, err := f.Stat()
-	if err != nil {
-		return false
-	}
-
-	return info.Mode()&os.ModeCharDevice != 0
+	return ok && term.IsTerminal(int(f.Fd()))
 }
 
 // reason is the OS's reason alone: the path is already in the message.

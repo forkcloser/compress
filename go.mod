@@ -7,6 +7,7 @@ require (
 	github.com/forkcloser/xz/v2 v2.0.0-rc.2
 	github.com/klauspost/compress v1.20.4
 	github.com/pierrec/lz4/v4 v4.1.33
+	golang.org/x/term v0.48.0
 )
 
 require golang.org/x/sys v0.50.0 // indirect
