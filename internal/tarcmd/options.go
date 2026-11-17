@@ -72,12 +72,12 @@ type options struct {
 	mtime           *time.Time
 	sortNames       bool
 	noRecursion     bool
-	absoluteNames   bool     // -P: names keep their leading slash and their ".."
-	excludes        []string // --exclude patterns
-	program         string   // --use-compress-program, when not a known compressor
-	zstdWindow      uint64   // the window a zstd frame may declare under --long, 0 without it
-	dir             string   // the last -C, for extract and list
-	members         []member // in order: what create archives, what extract and list take
+	absoluteNames   bool        // -P: names keep their leading slash and their ".."
+	excludes        []exclusion // --exclude patterns
+	program         string      // --use-compress-program, when not a known compressor
+	zstdWindow      uint64      // the window a zstd frame may declare under --long, 0 without it
+	dir             string      // the last -C, for extract and list
+	members         []member    // in order: what create archives, what extract and list take
 	help            bool
 	version         bool
 }
@@ -368,8 +368,11 @@ func (o *options) addList(file string) error {
 	return nil
 }
 
+// addExclude records an --exclude with the recursion in force where it
+// stands on the command line, as GNU tar does: after --no-recursion a
+// pattern that names a directory no longer covers what is under it.
 func (o *options) addExclude(pattern string) error {
-	o.excludes = append(o.excludes, pattern)
+	o.excludes = append(o.excludes, exclusion{pattern: pattern, under: !o.noRecursion})
 
 	return nil
 }
