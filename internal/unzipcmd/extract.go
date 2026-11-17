@@ -30,6 +30,20 @@ const (
 	// encryptedFlag is the general-purpose bit of an entry whose data is
 	// encrypted.
 	encryptedFlag = 0x1
+
+	// The creators, in the high byte of an entry's creator version, whose
+	// entries Info-ZIP takes a unix mode from; every other leaves DOS
+	// attributes, of which the read-only bit is the one that maps to a mode.
+	creatorFAT  = 0
+	creatorUnix = 3
+	dosReadOnly = 0x1
+
+	// What an entry without a unix mode is created with, for the umask to
+	// take from.
+	anyFile      os.FileMode = 0o666
+	anyDirectory os.FileMode = 0o777
+	writeBits    os.FileMode = 0o222
+	ownerBits    os.FileMode = 0o700
 )
 
 // The entries Info-ZIP skips rather than fails, in its words.
@@ -56,6 +70,35 @@ type dirEntry struct {
 	name    string
 	mode    os.FileMode
 	modTime time.Time
+}
+
+// permissions is the mode an entry is created with, and whether it is one
+// the archive stored, to be set exactly once the entry is written. An entry
+// from a creator without unix modes has none: archive/zip makes up 0666 for
+// it, which set exactly would go past the umask and leave a directory
+// nobody can enter. Its mode is what the umask leaves at creation, less the
+// write bits when the archive has it read-only.
+func permissions(file *zip.File, mode, fallback, anything os.FileMode) (os.FileMode, bool) {
+	if file.ExternalAttrs&dosReadOnly != 0 {
+		anything &^= writeBits
+	}
+
+	switch file.CreatorVersion >> 8 {
+	case creatorUnix:
+		if perm := mode.Perm(); perm != 0 {
+			return perm, true
+		}
+
+		return fallback, true
+	case creatorFAT:
+		// A unix tool that signs as FAT keeps its mode where unix does;
+		// Info-ZIP takes it when the owner's bits agree with the DOS ones.
+		if perm := os.FileMode(file.ExternalAttrs >> 16).Perm(); perm&ownerBits == anything&ownerBits {
+			return perm, true
+		}
+	}
+
+	return anything, false
 }
 
 func (e *extractor) warnf(format string, args ...any) {
@@ -159,15 +202,25 @@ func (e *extractor) display(name string) string {
 }
 
 func (e *extractor) directory(name string, file *zip.File, mode os.FileMode) {
-	perm := mode.Perm()
-	if perm == 0 {
-		perm = constants.DirPermissions
-	}
+	perm, stored := permissions(file, mode, constants.DirPermissions, anyDirectory)
 
 	if err := e.root.MkdirAll(name, perm|constants.OwnerAccess); err != nil {
 		e.errorf("checkdir error:  cannot create %s: %v", e.display(name), reason(err))
 
 		return
+	}
+
+	if !stored {
+		// A mode made up here takes nothing back from the umask the
+		// directory was created through.
+		info, err := e.root.Stat(name)
+		if err != nil {
+			e.warnf("%s:  cannot set mode: %v", e.display(name), reason(err))
+
+			return
+		}
+
+		perm &= info.Mode().Perm()
 	}
 
 	e.dirs = append(e.dirs, dirEntry{name: name, mode: perm, modTime: modTime(file)})
@@ -227,10 +280,7 @@ func (e *extractor) file(name string, file *zip.File, mode os.FileMode) {
 		return
 	}
 
-	perm := mode.Perm()
-	if perm == 0 {
-		perm = constants.FilePermissions
-	}
+	perm, stored := permissions(file, mode, constants.FilePermissions, anyFile)
 
 	out, err := e.root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
 	if err != nil {
@@ -255,9 +305,11 @@ func (e *extractor) file(name string, file *zip.File, mode os.FileMode) {
 	}
 
 	// The stored mode exactly, as Info-ZIP restores it: the create above went
-	// through the umask.
-	if err := e.root.Chmod(name, perm); err != nil {
-		e.warnf("%s:  cannot set mode: %v", e.display(name), reason(err))
+	// through the umask, which is where a mode made up here has to stay.
+	if stored {
+		if err := e.root.Chmod(name, perm); err != nil {
+			e.warnf("%s:  cannot set mode: %v", e.display(name), reason(err))
+		}
 	}
 
 	// Info-ZIP restores the time it stored; a refusal is not worth the entry.
