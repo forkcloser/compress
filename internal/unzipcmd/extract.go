@@ -61,8 +61,8 @@ type extractor struct {
 	stderr io.Writer
 	status int
 
-	// dirs are the directories extracted, in order, for the modes and
-	// times set once their content is in place.
+	// dirs are the directories an entry created, in order, for the modes
+	// and times set once their content is in place.
 	dirs []dirEntry
 }
 
@@ -202,10 +202,18 @@ func (e *extractor) display(name string) string {
 }
 
 func (e *extractor) directory(name string, file *zip.File, mode os.FileMode) {
+	if !e.parents(name) {
+		return
+	}
+
 	perm, stored := permissions(file, mode, constants.DirPermissions, anyDirectory)
 
-	if err := e.root.MkdirAll(name, perm|constants.OwnerAccess); err != nil {
-		e.errorf("checkdir error:  cannot create %s: %v", e.display(name), reason(err))
+	// A directory that is already there is not this run's to give a mode or
+	// a time to: the entry creates nothing, and nothing is said of it.
+	if err := e.root.Mkdir(name, perm|constants.OwnerAccess); err != nil {
+		if info, statErr := e.root.Stat(name); statErr != nil || !info.IsDir() {
+			e.errorf("checkdir error:  cannot create %s: %v", e.display(name), reason(err))
+		}
 
 		return
 	}
