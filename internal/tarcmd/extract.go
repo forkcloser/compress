@@ -26,6 +26,7 @@ var (
 	errDotDot          = errors.New("Member name contains '..'")
 	errIsDir           = errors.New("Is a directory")
 	errUnsupportedType = errors.New("Cannot mknod: entry type is not supported")
+	errSparse          = errors.New("Cannot extract: sparse member is not supported")
 	errLinkTarget      = errors.New("Cannot hard link: target not extracted")
 	errAboveRoot       = errors.New("Member name resolves above the file system root")
 )
@@ -118,14 +119,16 @@ func (e *extractor) entry(reader *tar.Reader, header *tar.Header) {
 
 	var err error
 
-	switch header.Typeflag {
-	case tar.TypeDir:
+	switch {
+	case sparse(header):
+		err = errSparse
+	case header.Typeflag == tar.TypeDir:
 		err = e.dir(name, header)
-	case tar.TypeReg:
+	case header.Typeflag == tar.TypeReg:
 		err = e.file(reader, name, header)
-	case tar.TypeSymlink:
+	case header.Typeflag == tar.TypeSymlink:
 		err = e.symlink(name, header)
-	case tar.TypeLink:
+	case header.Typeflag == tar.TypeLink:
 		err = e.hardlink(name, header)
 	default:
 		err = fmt.Errorf("%w: %q", errUnsupportedType, header.Typeflag)
@@ -134,6 +137,24 @@ func (e *extractor) entry(reader *tar.Reader, header *tar.Header) {
 	if err != nil {
 		e.reportf("%s: %v", header.Name, err)
 	}
+}
+
+// sparse reports a member stored as a map of its data and holes. It reads
+// as a regular file of its full size, the holes as zeros, whatever little
+// the archive carries of it: a few blocks would write out any size they
+// state.
+func sparse(header *tar.Header) bool {
+	if header.Typeflag == tar.TypeGNUSparse {
+		return true
+	}
+
+	for key := range header.PAXRecords {
+		if strings.HasPrefix(key, "GNU.sparse.") {
+			return true
+		}
+	}
+
+	return false
 }
 
 // memberName turns an archive name into the path under the root: forward

@@ -62,7 +62,9 @@ guessing.
   the destination; `-P` is GNU's `--absolute-names`, the exception it names:
   names keep their leading slash and `..`, and land where they say, which is
   what actions/cache archives with (its manifest names a cache outside the
-  workspace as `../…`). Exit 0, 2 after any error, 64 for a usage error.
+  workspace as `../…`). A device, a fifo and a sparse member are not
+  extracted: each is reported and skipped. Exit 0, 2 after any error, 64
+  for a usage error.
 - **xz**, **gzip** and **zstd**: files compressed beside themselves,
   decompressed back by suffix, standard streams when no file is named;
   `-c`, `-d`, `-f`, `-k`, `-q`, `-t`, the levels (`-1`…`-9`, zstd's up to

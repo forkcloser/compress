@@ -18,6 +18,9 @@
 // name as the archive carries it, or a directory with everything under it;
 // one no entry carries is reported and the status is 2.
 //
+// Extraction writes directories, regular files, symbolic links and hard
+// links. A device, a fifo and a sparse member are reported and skipped.
+//
 // Exit status is GNU's: 0, 2 after any error (a fatal one stops the run, a
 // per-member one is reported and the run goes on), 64 for a usage error.
 // Diagnostics go to standard error prefixed "tar: ".
