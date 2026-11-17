@@ -48,6 +48,10 @@ type Format struct {
 	Warning int
 	// Links is when the tool skips an input that is a link.
 	Links Links
+	// ExistsIsError is whether a counterpart already there, without
+	// --force, is an error and not a warning: it is for xz, whose --quiet
+	// does not silence it.
+	ExistsIsError bool
 	// Compress wraps w in the format's encoder at level; the header fields
 	// name the original file where the format records it (gzip), empty for
 	// standard input or --no-name.
@@ -666,7 +670,7 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 
 	out, err := r.create(target, info.Mode().Perm())
 	if err != nil {
-		if errors.Is(err, os.ErrExist) {
+		if errors.Is(err, os.ErrExist) && !r.format.ExistsIsError {
 			r.warnf("%s already exists; not overwritten", target)
 		} else {
 			r.failf("%s: %v", target, reason(err))
