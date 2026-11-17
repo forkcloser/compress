@@ -120,6 +120,9 @@ type Header struct {
 // Extra is one tool-specific option.
 type Extra struct {
 	TakesValue bool
+	// MayTakeValue is an option whose value is its own to have or not: it
+	// is the one after '=', and never the next word.
+	MayTakeValue bool
 	// Apply records the option; a nil Apply accepts and ignores it.
 	Apply func(o *Options, value string) error
 }
@@ -467,6 +470,10 @@ func (f *Format) resolveLong(given string) (string, error) {
 func longExtra(
 	opts *Options, name string, extra Extra, value string, hasValue bool, following []string,
 ) (int, error) {
+	if extra.MayTakeValue {
+		return 0, extra.apply(opts, value)
+	}
+
 	if !extra.TakesValue {
 		if hasValue {
 			return 0, fmt.Errorf("%w: option '--%s' doesn't allow an argument", errUsage, name)
