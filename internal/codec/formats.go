@@ -110,13 +110,16 @@ const ZstdWindow = 128 * constants.MiB
 // refused with.
 var ErrZstdWindow = kzstd.ErrWindowSizeExceeded
 
-// Zstd is the zstd decoder, which decodes concurrently on its own, for a
-// frame of any window the decoder takes: 512 MiB at most.
+// Zstd is the zstd decoder for a frame of any window the decoder takes:
+// 512 MiB at most.
 func Zstd(r io.Reader) (io.ReadCloser, error) {
 	return ZstdWithin(kzstd.MaxWindowSize)(r)
 }
 
-// ZstdWithin is Zstd for frames whose window is at most window bytes.
+// ZstdWithin is Zstd for frames whose window is at most window bytes. The
+// decoder is read ahead of its consumer though it decodes concurrently on
+// its own: its Close and its Read are not safe together, and reading ahead
+// is what keeps a Close from another goroutine off a Read in flight.
 func ZstdWithin(window uint64) func(io.Reader) (io.ReadCloser, error) {
 	return func(r io.Reader) (io.ReadCloser, error) {
 		decoder, err := kzstd.NewReader(r, kzstd.WithDecoderMaxWindow(window))
@@ -124,7 +127,7 @@ func ZstdWithin(window uint64) func(io.Reader) (io.ReadCloser, error) {
 			return nil, fmt.Errorf("zstd decoder: %w", err)
 		}
 
-		return &zstdReader{decoder: decoder}, nil
+		return ReadAhead(&zstdReader{decoder: decoder}), nil
 	}
 }
 
