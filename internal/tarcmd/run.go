@@ -194,7 +194,7 @@ func openArchive(opts *options, stdin io.Reader) (io.ReadCloser, func(), error) 
 		release = func() { _ = file.Close() } // read-only: a close error carries nothing
 	}
 
-	reader, err := openReader(opts.compression, opts.program, source)
+	reader, err := openReader(opts.compression, opts.program, opts.zstdWindow, source)
 	if err != nil {
 		release()
 

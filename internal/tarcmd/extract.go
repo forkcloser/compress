@@ -78,7 +78,7 @@ func (e *extractor) extract(reader *tar.Reader) error {
 		}
 
 		if err != nil {
-			return fmt.Errorf("Unexpected EOF in archive: %w", err)
+			return archiveError(err)
 		}
 
 		e.entry(reader, header)
