@@ -6,23 +6,27 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math/rand/v2"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/klauspost/compress/flate"
 
 	"github.com/forkcloser/xos"
-
-	"github.com/forkcloser/compress/internal/constants"
 )
 
 const (
 	// dosEpoch is the first year the DOS date field can hold.
 	dosEpoch = 1980
 	percent  = 100
+	// newArchivePerm is a new archive's mode before the umask.
+	newArchivePerm fs.FileMode = 0o666
+	// tempAttempts bounds the retries on a name that is taken.
+	tempAttempts = 10000
 )
 
 var errRepeated = errors.New("cannot repeat names in zip file")
@@ -40,6 +44,9 @@ type creator struct {
 	stdout io.Writer
 	stderr io.Writer
 
+	// self is the archive as this run finds it, nil when there is none yet
+	// or it is standard output.
+	self fs.FileInfo
 	// pending is the entry whose line waits for its sizes, which the writer
 	// settles only when the next entry begins or the archive closes.
 	pending *pendingEntry
@@ -63,6 +70,12 @@ func (c *creator) errorf(status int, format string, args ...any) int {
 }
 
 func (c *creator) run() int {
+	var target string
+	if c.opts.archive != "-" {
+		target = archiveName(c.opts.archive)
+		c.self, _ = os.Stat(target)
+	}
+
 	entries, err := c.collect()
 	if err != nil {
 		return c.errorf(ExitUsage, "%v (%v)", errUsage, err)
@@ -75,8 +88,6 @@ func (c *creator) run() int {
 
 		return c.write(c.stdout, nil, entries)
 	}
-
-	target := archiveName(c.opts.archive)
 
 	existing, err := openExisting(target)
 	if err != nil {
@@ -267,10 +278,36 @@ func (c *creator) storedName(fsPath string, isDir bool) (string, bool) {
 	return name, true
 }
 
+// createBeside creates the file an archive is written to before it takes
+// target's name: beside it, so that the move is a rename, under a name of
+// its own, with perm through the umask.
+func createBeside(target string, perm fs.FileMode) (*os.File, error) {
+	prefix := filepath.Join(filepath.Dir(target), "zi")
+
+	for range tempAttempts {
+		// #nosec G404 -- O_EXCL makes the name this file's own, not its secrecy
+		name := prefix + strconv.FormatUint(uint64(rand.Uint32()), 10)
+
+		file, err := xos.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, perm)
+		if !errors.Is(err, fs.ErrExist) {
+			return file, err //nolint:wrapcheck // a PathError names the operation and the file already
+		}
+	}
+
+	return nil, &fs.PathError{Op: "open", Path: prefix + "*", Err: fs.ErrExist}
+}
+
 // writeFile writes the archive beside its final name and moves it into
-// place, so a failure leaves whatever was there.
+// place, so a failure leaves whatever was there. A new archive is created
+// through the umask, as any file is; an update's has the mode of the
+// archive it replaces, and is never more open than that while it is written.
 func (c *creator) writeFile(target string, existing *zip.ReadCloser, entries []entry) int {
-	tmp, err := xos.CreateTemp(filepath.Dir(target), "zi")
+	perm := newArchivePerm
+	if c.self != nil {
+		perm = c.self.Mode().Perm()
+	}
+
+	tmp, err := createBeside(target, perm)
 	if err != nil {
 		return c.errorf(ExitCreate, "Could not create output file (%v)", err)
 	}
@@ -287,8 +324,11 @@ func (c *creator) writeFile(target string, existing *zip.ReadCloser, entries []e
 		return c.errorf(ExitCreate, "Output file write failure (%v)", err)
 	}
 
-	if err := os.Chmod(tmp.Name(), constants.FilePermissions); err != nil {
-		return c.errorf(ExitCreate, "Could not create output file (%v)", err)
+	if c.self != nil {
+		// Past the umask: the mode is the replaced archive's, not a new file's.
+		if err := os.Chmod(tmp.Name(), perm); err != nil {
+			return c.errorf(ExitCreate, "Could not create output file (%v)", err)
+		}
 	}
 
 	if existing != nil {
