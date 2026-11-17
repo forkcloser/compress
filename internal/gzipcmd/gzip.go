@@ -165,7 +165,8 @@ func Format() *filecodec.Format {
 			"n": noName, "no-name": noName,
 			"N": name, "name": name,
 		},
-		Help: helpText,
+		Unsupported: []string{"ascii", "license", "list", "recursive", "suffix"},
+		Help:        helpText,
 	}
 }
 

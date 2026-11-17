@@ -196,7 +196,8 @@ func TestRefusals(t *testing.T) {
 		{
 			[]string{"--memlimit-=1MiB"},
 			filecodec.ExitError,
-			"option '--memlimit-' is ambiguous; possibilities: '--memlimit-compress' '--memlimit-decompress'",
+			"option '--memlimit-' is ambiguous; possibilities: " +
+				"'--memlimit-compress' '--memlimit-decompress' '--memlimit-mt-decompress'",
 		},
 		{[]string{"-y"}, filecodec.ExitError, "invalid option -- 'y'"},
 		{[]string{"-T"}, filecodec.ExitError, "requires an argument"},

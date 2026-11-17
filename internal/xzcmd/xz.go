@@ -108,6 +108,13 @@ func Format() *filecodec.Format {
 			"memlimit-decompress": withValue,
 			"M":                   withValue,
 		},
+		Unsupported: []string{
+			"arm", "arm64", "armthumb", "block-list", "block-size", "delta", "files", "files0", "filters",
+			"filters-help", "filters1", "filters2", "filters3", "filters4", "filters5", "filters6", "filters7",
+			"filters8", "filters9", "flush-timeout", "ia64", "ignore-check", "info-memory", "list", "long-help",
+			"lzma1", "lzma2", "memlimit-mt-decompress", "memory", "no-adjust", "no-sparse", "no-sync", "no-warn",
+			"powerpc", "riscv", "robot", "single-stream", "sparc", "suffix", "x86",
+		},
 		Help: helpText,
 	}
 }
