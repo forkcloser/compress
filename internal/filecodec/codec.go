@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"github.com/forkcloser/xos"
@@ -141,6 +143,9 @@ func (f *Format) Run(name string, args []string, stdin io.Reader, stdout, stderr
 	}
 
 	run := &runner{format: f, opts: opts, stdin: stdin, stdout: stdout, stderr: stderr}
+
+	stop := run.watch()
+	defer stop()
 
 	if len(opts.Files) == 0 {
 		run.file("-")
@@ -444,6 +449,11 @@ type runner struct {
 	stdout io.Writer
 	stderr io.Writer
 	status int
+	// partial is the counterpart being written, the watcher's to remove if
+	// the run is interrupted; guard is held across every change of it, and
+	// for good once a signal has come.
+	guard   sync.Mutex
+	partial string
 }
 
 func (r *runner) warnf(format string, args ...any) {
@@ -620,7 +630,7 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 		return
 	}
 
-	out, err := xos.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, info.Mode().Perm())
+	out, err := r.create(target, info.Mode().Perm())
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
 			r.warnf("%s already exists; not overwritten", target)
@@ -635,6 +645,7 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 		_ = out.Close()
 		_ = os.Remove(target)
 
+		r.settle()
 		r.failf("%s: %v", name, err)
 
 		return
@@ -643,6 +654,7 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 	if err := out.Close(); err != nil {
 		_ = os.Remove(target)
 
+		r.settle()
 		r.failf("%s: %v", target, reason(err))
 
 		return
@@ -654,6 +666,10 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 	_ = os.Chmod(target, info.Mode().Perm())
 	_ = os.Chtimes(target, info.ModTime(), info.ModTime())
 
+	// Before the input goes: a signal from here on finds a whole counterpart,
+	// and removing it would leave neither file.
+	r.settle()
+
 	if r.opts.Keep {
 		return
 	}
@@ -663,6 +679,65 @@ func (r *runner) toFile(name string, info os.FileInfo) {
 
 	if err := os.Remove(name); err != nil {
 		r.failf("%s: %v", name, reason(err))
+	}
+}
+
+// create makes the counterpart and hands it to the watcher in one step: an
+// interruption finds no file, or one it knows to remove.
+func (r *runner) create(target string, perm os.FileMode) (*os.File, error) {
+	r.guard.Lock()
+	defer r.guard.Unlock()
+
+	out, err := xos.OpenFile(target, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
+	if err == nil {
+		r.partial = target
+	}
+
+	return out, err //nolint:wrapcheck // the caller words it
+}
+
+// settle takes the counterpart back from the watcher: whole or removed, it
+// is no longer a signal's to remove.
+func (r *runner) settle() {
+	r.guard.Lock()
+	defer r.guard.Unlock()
+
+	r.partial = ""
+}
+
+// watch is the run's answer to the signals that end it: the counterpart
+// being written is removed, then the signal ends the process. The result
+// stops the watching.
+func (r *runner) watch() func() {
+	// No signal to watch must not reach Notify: it takes none as all.
+	caught := interrupts()
+	if len(caught) == 0 {
+		return func() {}
+	}
+
+	signals := make(chan os.Signal, 1)
+	done := make(chan struct{})
+
+	signal.Notify(signals, caught...)
+
+	go func() {
+		select {
+		case sig := <-signals:
+			// Never unlocked: the run must not get past the file it is on.
+			r.guard.Lock()
+
+			if r.partial != "" {
+				_ = os.Remove(r.partial)
+			}
+
+			die(sig)
+		case <-done:
+		}
+	}()
+
+	return func() {
+		signal.Stop(signals)
+		close(done)
 	}
 }
 

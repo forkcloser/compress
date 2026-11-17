@@ -10,7 +10,9 @@
 // terminal without --force. Nor, without --force, is an input taken that is
 // a symbolic link or, for xz and gzip, a file with other names: gzip skips
 // it where the result is a file, xz only where it would then be removed,
-// zstd skips the symbolic link wherever the result goes.
+// zstd skips the symbolic link wherever the result goes. A run that a
+// signal ends while it writes a result removes what it wrote of it and
+// leaves the original.
 //
 // Exit status is the tools': 0, 1 after an error, and after a warning alone
 // (a file skipped for its suffix or for being a link, an existing result
