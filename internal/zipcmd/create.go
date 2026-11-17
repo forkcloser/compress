@@ -237,9 +237,16 @@ func walk(dir string, visit func(fsPath string, err error)) {
 	}
 }
 
-// add appends one input under its archive name, or skips it: a directory
-// under -D or -j, a name that would escape the archive's root.
+// add appends one input under its archive name, or skips it: the archive
+// itself, a directory under -D or -j, a name that would escape the
+// archive's root.
 func (c *creator) add(entries []entry, fsPath string, info fs.FileInfo) []entry {
+	// By identity, not by name: -r over the directory the archive is in
+	// meets it under another spelling, and would nest it once more each run.
+	if os.SameFile(c.self, info) {
+		return entries
+	}
+
 	if info.IsDir() && (c.opts.noDirEntries || c.opts.junkPaths) {
 		return entries
 	}

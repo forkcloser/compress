@@ -7,12 +7,13 @@
 // with -r, everything under it. An archive that exists is updated: an input
 // replaces the entry of its name, or leaves it as it is when the input
 // cannot be read; the rest are kept, and so are the archive's permissions,
-// where a new archive is created through the umask. Options: -r, -q, -0
-// through -9, -X, -@, -o, -j, -D, -h, -v. An archive named "-" is written
-// to standard output. Symbolic links are followed, as Info-ZIP does without
-// -y, except that -r does not walk into a link to a directory. A file that
-// deflate does not shrink is deflated all the same, where
-// Info-ZIP would store it. Anything else is a usage error.
+// where a new archive is created through the umask. The archive is never
+// one of its own inputs. Options: -r, -q, -0 through -9, -X, -@, -o, -j,
+// -D, -h, -v. An archive named "-" is written to standard output. Symbolic
+// links are followed, as Info-ZIP does without -y, except that -r does not
+// walk into a link to a directory. A file that deflate does not shrink is
+// deflated all the same, where Info-ZIP would store it. Anything else is a
+// usage error.
 //
 // Exit status is Info-ZIP's: 0, 3 for an archive that is not a zip file, 12
 // when there is nothing to do, 15 when the archive cannot be written, 16 for
