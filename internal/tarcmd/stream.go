@@ -14,6 +14,7 @@ import (
 
 	"github.com/forkcloser/compress/bzip2"
 	"github.com/forkcloser/compress/gzip"
+	"github.com/forkcloser/compress/internal/codec"
 	"github.com/forkcloser/compress/internal/constants"
 	"github.com/forkcloser/compress/lz4"
 	"github.com/forkcloser/compress/xz"
@@ -231,7 +232,7 @@ func bySuffix(name string) compression {
 // openReader wraps the archive's reader in the decompressor the options
 // name, or the one the stream's magic names when they name none; a stream
 // with no known magic is a plain archive.
-func openReader(wrap compression, program string, reader io.Reader) (io.ReadCloser, error) {
+func openReader(wrap compression, program string, zstdWindow uint64, reader io.Reader) (io.ReadCloser, error) {
 	if wrap == compressProgram {
 		return openProgramReader(program, reader)
 	}
@@ -261,13 +262,31 @@ func openReader(wrap compression, program string, reader io.Reader) (io.ReadClos
 	case compressBzip2:
 		return bzip2.NewReader(buffered)
 	case compressZstd:
-		return zstd.NewReader(buffered)
+		if zstdWindow == 0 {
+			zstdWindow = codec.ZstdWindow
+		}
+
+		return codec.Reader(codec.ZstdWithin(zstdWindow), buffered)
 	case compressLz4:
 		return lz4.NewReader(buffered)
 	case compressProgram:
 	}
 
 	return nil, fmt.Errorf("%w: %d", errUnknownCompression, wrap)
+}
+
+// archiveError words an error of the archive's reader. A zstd frame whose
+// window is over the limit is said to be that, with what allows it: the
+// decoder's own words name neither.
+func archiveError(err error) error {
+	if errors.Is(err, codec.ErrZstdWindow) {
+		return fmt.Errorf(
+			"zstd window over the limit (--use-compress-program 'unzstd --long=N' allows 2^N bytes): %w",
+			err,
+		)
+	}
+
+	return fmt.Errorf("Unexpected EOF in archive: %w", err)
 }
 
 // nopWriteCloser is a plain archive's writer: the file is closed by the caller.

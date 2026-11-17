@@ -27,6 +27,8 @@ import (
 	plz4 "github.com/pierrec/lz4/v4"
 
 	uxz "github.com/forkcloser/xz/v2"
+
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 // The raw constructors: each format's decoder or encoder as its library
@@ -99,14 +101,31 @@ func Lz4Writer(w io.Writer) (io.WriteCloser, error) {
 	return plz4.NewWriter(w), nil
 }
 
-// Zstd is the zstd decoder, which decodes concurrently on its own.
-func Zstd(r io.Reader) (io.ReadCloser, error) {
-	decoder, err := kzstd.NewReader(r)
-	if err != nil {
-		return nil, fmt.Errorf("zstd decoder: %w", err)
-	}
+// ZstdWindow is the largest window a zstd frame may declare to the commands
+// unless --long allows more: the zstd tool's own limit. The decoder
+// allocates the window a frame declares before it decodes a byte of it.
+const ZstdWindow = 128 * constants.MiB
 
-	return &zstdReader{decoder: decoder}, nil
+// ErrZstdWindow is in the chain of the error a frame over the limit is
+// refused with.
+var ErrZstdWindow = kzstd.ErrWindowSizeExceeded
+
+// Zstd is the zstd decoder, which decodes concurrently on its own, for a
+// frame of any window the decoder takes: 512 MiB at most.
+func Zstd(r io.Reader) (io.ReadCloser, error) {
+	return ZstdWithin(kzstd.MaxWindowSize)(r)
+}
+
+// ZstdWithin is Zstd for frames whose window is at most window bytes.
+func ZstdWithin(window uint64) func(io.Reader) (io.ReadCloser, error) {
+	return func(r io.Reader) (io.ReadCloser, error) {
+		decoder, err := kzstd.NewReader(r, kzstd.WithDecoderMaxWindow(window))
+		if err != nil {
+			return nil, fmt.Errorf("zstd decoder: %w", err)
+		}
+
+		return &zstdReader{decoder: decoder}, nil
+	}
 }
 
 // ZstdWriter is the zstd encoder.
