@@ -70,6 +70,7 @@ func Format() *filecodec.Format {
 		Warning:       filecodec.ExitWarning,
 		Links:         filecodec.LinksWhereRemoved,
 		ExistsIsError: true,
+		SkipSuffixed:  true,
 		Abbreviations: true,
 		Compress: func(w io.Writer, level int, _ filecodec.Header) (io.WriteCloser, error) {
 			writer, err := uxz.NewWriter(w, uxz.WithDictSize(dictCaps()[level]))

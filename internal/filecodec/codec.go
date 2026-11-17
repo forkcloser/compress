@@ -48,6 +48,10 @@ type Format struct {
 	Warning int
 	// Links is when the tool skips an input that is a link.
 	Links Links
+	// SkipSuffixed is whether a file that already has one of the tool's
+	// suffixes is left uncompressed without --force: gzip and xz skip it,
+	// zstd compresses it again.
+	SkipSuffixed bool
 	// ExistsIsError is whether a counterpart already there, without
 	// --force, is an error and not a warning: it is for xz, whose --quiet
 	// does not silence it.
@@ -812,7 +816,7 @@ func (r *runner) watch() func() {
 // it on decompression, where a name with no known suffix is skipped.
 func (r *runner) target(name string) (string, bool) {
 	if !r.opts.Decompress {
-		if _, known := r.suffix(name); known && !r.opts.Force {
+		if _, known := r.suffix(name); known && r.format.SkipSuffixed && !r.opts.Force {
 			r.warnf("%s already has the %s suffix -- unchanged", name, r.format.Suffix)
 
 			return "", false
