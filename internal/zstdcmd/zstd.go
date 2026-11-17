@@ -69,6 +69,7 @@ func Format() *filecodec.Format {
 		Keep:    true,
 		Warning: filecodec.ExitError,
 		Links:   filecodec.LinksSymbolic,
+		Lacks:   []string{"best", "to-stdout"},
 		Compress: func(w io.Writer, level int, _ filecodec.Header) (io.WriteCloser, error) {
 			writer, err := zstd.NewWriter(w, zstd.WithEncoderLevel(zstd.EncoderLevelFromZstd(level)))
 			if err != nil {

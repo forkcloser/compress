@@ -115,6 +115,7 @@ func Format() *filecodec.Format {
 		Warning:       filecodec.ExitWarning,
 		Links:         filecodec.LinksToFile,
 		SkipSuffixed:  true,
+		Lacks:         []string{"z", "compress"},
 		Abbreviations: true,
 		Compress: func(w io.Writer, level int, header filecodec.Header) (io.WriteCloser, error) {
 			writer, err := kgzip.NewWriterLevel(w, level)
