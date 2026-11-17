@@ -15,8 +15,6 @@ import (
 	"github.com/forkcloser/xos"
 )
 
-var errShortRead = errors.New("file shrank while being read")
-
 // creator writes members into one archive. A member that cannot be archived
 // is reported and the run goes on; the archive stays well-formed either way.
 type creator struct {
@@ -27,6 +25,7 @@ type creator struct {
 
 	warnedLeadingSlash bool
 	failed             bool
+	changed            bool // a member changed while it was read: the archive is whole, and not the tree
 }
 
 // addMember archives one command-line member, or every name in its -T list.
@@ -175,7 +174,7 @@ func (c *creator) addPath(fsPath, archiveName string, info os.FileInfo) error {
 	}
 
 	if content != nil {
-		if err := c.copyContent(content, header); err != nil {
+		if err := c.copyContent(content, header, info); err != nil {
 			return fmt.Errorf("%s: %w", archiveName, err)
 		}
 	}
@@ -240,13 +239,14 @@ func (c *creator) addChildren(fsPath, archiveName string) error {
 // checkUnchanged reads the directory again once its entries are archived
 // and reports it when the names are not the ones first read. The archive
 // then holds the first reading, short of the tree or past it, and nothing
-// else says so: no entry failed. The run goes on and exits with failure.
+// else says so: no entry failed. The run goes on, and its status says a
+// member changed.
 // Excluded names are no part of the archive and are left out of both
 // readings: what a caller excludes is often what moves.
 func (c *creator) checkUnchanged(fsPath, archiveName string, entries []os.DirEntry) {
 	dir, err := xos.Open(fsPath)
 	if err != nil {
-		c.reportf("%s: directory changed as we read it", archiveName)
+		c.changedf("%s: file changed as we read it", archiveName)
 
 		return
 	}
@@ -256,7 +256,7 @@ func (c *creator) checkUnchanged(fsPath, archiveName string, entries []os.DirEnt
 	_ = dir.Close() // read-only: a close error carries nothing
 
 	if err != nil || !slices.Equal(c.archived(archiveName, entries), c.archived(archiveName, again)) {
-		c.reportf("%s: directory changed as we read it", archiveName)
+		c.changedf("%s: file changed as we read it", archiveName)
 	}
 }
 
@@ -330,20 +330,49 @@ func (c *creator) header(fsPath, archiveName string, info os.FileInfo) (*tar.Hea
 	return header, nil
 }
 
-// copyContent writes exactly the size the header announced, so a file that
-// grows while read leaves the archive well-formed, and one that shrinks is
-// an error rather than a truncated archive.
-func (c *creator) copyContent(f *os.File, header *tar.Header) error {
-	n, err := io.CopyN(c.writer, f, header.Size)
-	if err != nil {
-		if errors.Is(err, io.EOF) {
-			return fmt.Errorf("%w: %d of %d bytes", errShortRead, n, header.Size)
-		}
-
+// copyContent writes exactly the size the header announced, whatever
+// becomes of the file meanwhile, so the archive stays well-formed: one that
+// grows is cut at that size, one that shrinks is filled with zeros to it.
+// Either is said, as is a file whose size or time is no longer what the
+// header was built from once it is read.
+func (c *creator) copyContent(f *os.File, header *tar.Header, info os.FileInfo) error {
+	copied, err := io.CopyN(c.writer, f, header.Size)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return fmt.Errorf("Cannot write: %w", errReason(err))
 	}
 
+	if missing := header.Size - copied; missing > 0 {
+		if _, err := io.CopyN(c.writer, zeros{}, missing); err != nil {
+			return fmt.Errorf("Cannot write: %w", errReason(err))
+		}
+
+		c.changedf("%s: File shrank by %d bytes; padding with zeros", header.Name, missing)
+
+		return nil
+	}
+
+	if now, err := f.Stat(); err != nil || now.Size() != info.Size() || !now.ModTime().Equal(info.ModTime()) {
+		c.changedf("%s: file changed as we read it", header.Name)
+	}
+
 	return nil
+}
+
+// zeros reads as zeros without end.
+type zeros struct{}
+
+func (zeros) Read(p []byte) (int, error) {
+	clear(p)
+
+	return len(p), nil
+}
+
+// changedf reports a member that is not, in the archive, what it is in the
+// tree any more: the status says so, and it is not a failure.
+func (c *creator) changedf(format string, args ...any) {
+	c.changed = true
+
+	fmt.Fprintf(c.stderr, "tar: "+format+"\n", args...)
 }
 
 func (c *creator) reportf(format string, args ...any) {
