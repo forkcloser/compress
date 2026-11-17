@@ -21,6 +21,7 @@ import (
 
 	"github.com/forkcloser/compress/internal/filecodec"
 	"github.com/forkcloser/compress/internal/gzipcmd"
+	"github.com/forkcloser/compress/internal/reference"
 )
 
 func run(t *testing.T, name string, stdin []byte, args ...string) (status int, stdout, stderr string) {
@@ -229,14 +230,12 @@ func TestRefusals(t *testing.T) {
 	}
 }
 
-// TestInterop: streams exchanged with the gzip on PATH, when there is one.
+// TestInterop: streams exchanged with the gzip on PATH that is not ours, when
+// there is one.
 func TestInterop(t *testing.T) {
 	t.Parallel()
 
-	system, err := exec.LookPath("gzip")
-	if err != nil {
-		t.Skip("no gzip on PATH")
-	}
+	system := reference.Find(t, "gzip", "-V")
 
 	ours := mustRun(t, "gzip", []byte(payload))
 
