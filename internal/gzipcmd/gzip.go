@@ -109,6 +109,7 @@ func Format() *filecodec.Format {
 		Name:          "gzip",
 		Suffix:        ".gz",
 		Suffixes:      map[string]string{".gz": "", ".tgz": ".tar", ".taz": ".tar", "-gz": "", ".z": "", "-z": ""},
+		FoldSuffix:    true,
 		MinLevel:      1,
 		MaxLevel:      9,
 		DefaultLevel:  6,

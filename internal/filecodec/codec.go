@@ -38,6 +38,9 @@ type Format struct {
 	// Suffixes maps every compressed suffix the tool recognizes to what
 	// replaces it on decompression ("" strips it): ".tgz" to ".tar".
 	Suffixes map[string]string
+	// FoldSuffix is whether a suffix is known whatever its case: gzip takes
+	// data.GZ for data.gz, xz and zstd know theirs as written.
+	FoldSuffix bool
 	// Levels are the compression levels accepted; DefaultLevel is the one
 	// without a -N.
 	MinLevel, MaxLevel, DefaultLevel int
@@ -850,8 +853,9 @@ func (r *runner) target(name string) (string, bool) {
 		return name + r.format.Suffix, true
 	}
 
+	// A name that is all suffix has none left for the counterpart.
 	suffix, known := r.suffix(name)
-	if !known {
+	if !known || suffix == filepath.Base(name) {
 		r.warnf("%s: unknown suffix -- ignored", name)
 
 		return "", false
@@ -862,12 +866,15 @@ func (r *runner) target(name string) (string, bool) {
 
 // suffix is the known compressed suffix name ends with, the longest first.
 func (r *runner) suffix(name string) (string, bool) {
-	lower := strings.ToLower(name)
+	written := name
+	if r.format.FoldSuffix {
+		written = strings.ToLower(name)
+	}
 
 	best := ""
 
 	for suffix := range r.format.Suffixes {
-		if strings.HasSuffix(lower, suffix) && len(suffix) > len(best) {
+		if strings.HasSuffix(written, suffix) && len(suffix) > len(best) {
 			best = suffix
 		}
 	}
