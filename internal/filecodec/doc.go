@@ -18,6 +18,6 @@
 // Exit status is the tools': 0, 1 after an error, and after a warning alone
 // (a file skipped for its suffix or for being a link, an existing result
 // left alone, input that goes on after the end of a gzip stream) the tool's
-// own: 2 for xz and gzip, 1 for zstd. Diagnostics go to standard error
-// prefixed with the tool's name.
+// own: 2 for xz and gzip, 1 for zstd. For xz an existing result is an
+// error. Diagnostics go to standard error prefixed with the tool's name.
 package filecodec

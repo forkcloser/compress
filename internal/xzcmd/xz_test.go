@@ -137,9 +137,10 @@ func TestFiles(t *testing.T) {
 		t.Errorf("--stdout: %q", got)
 	}
 
-	// A second compression refuses to overwrite without --force, as a warning.
+	// A second compression refuses to overwrite without --force: for xz an
+	// error.
 	status, _, stderr := run(t, "xz", nil, "-k", file)
-	if status != filecodec.ExitWarning || !strings.Contains(stderr, "already exists") {
+	if status != filecodec.ExitError || !strings.Contains(stderr, "data.txt.xz: ") {
 		t.Errorf("exit %d, stderr %q", status, stderr)
 	}
 
