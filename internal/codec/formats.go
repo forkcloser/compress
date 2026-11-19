@@ -27,6 +27,8 @@ import (
 	plz4 "github.com/pierrec/lz4/v4"
 
 	uxz "github.com/forkcloser/xz/v2"
+
+	"github.com/forkcloser/compress/internal/constants"
 )
 
 // The raw constructors: each format's decoder or encoder as its library
@@ -85,18 +87,13 @@ func Bzip2(r io.Reader) (io.ReadCloser, error) {
 	return ReadAhead(io.NopCloser(gobzip2.NewReader(r))), nil
 }
 
-// Lz4 is the lz4 decoder, decoding frame blocks on GOMAXPROCS goroutines.
-// Abandoning a partially consumed reader parks those workers and their
-// block buffers for good, as the library has no cancellation: a consumer
-// that stops short of EOF by design (a tar reader halting at the
-// end-of-archive marker) must drain the rest before dropping the reader.
+// Lz4 is the lz4 decoder, decoding in order and read ahead of its consumer
+// as the other serial decoders are. Not on several goroutines, which the
+// library offers: a reader left before its end keeps them parked with
+// their block buffers, and the library's Reset, which lets them go,
+// returns while one of them may still read the source.
 func Lz4(r io.Reader) (io.ReadCloser, error) {
-	decoder := plz4.NewReader(r)
-	if err := decoder.Apply(plz4.ConcurrencyOption(-1)); err != nil {
-		return nil, fmt.Errorf("lz4 concurrency: %w", err)
-	}
-
-	return io.NopCloser(decoder), nil
+	return ReadAhead(io.NopCloser(plz4.NewReader(r))), nil
 }
 
 // Lz4Writer is the lz4 encoder.
@@ -104,14 +101,34 @@ func Lz4Writer(w io.Writer) (io.WriteCloser, error) {
 	return plz4.NewWriter(w), nil
 }
 
-// Zstd is the zstd decoder, which decodes concurrently on its own.
-func Zstd(r io.Reader) (io.ReadCloser, error) {
-	decoder, err := kzstd.NewReader(r)
-	if err != nil {
-		return nil, fmt.Errorf("zstd decoder: %w", err)
-	}
+// ZstdWindow is the largest window a zstd frame may declare to the commands
+// unless --long allows more: the zstd tool's own limit. The decoder
+// allocates the window a frame declares before it decodes a byte of it.
+const ZstdWindow = 128 * constants.MiB
 
-	return &zstdReader{decoder: decoder}, nil
+// ErrZstdWindow is in the chain of the error a frame over the limit is
+// refused with.
+var ErrZstdWindow = kzstd.ErrWindowSizeExceeded
+
+// Zstd is the zstd decoder for a frame of any window the decoder takes:
+// 512 MiB at most.
+func Zstd(r io.Reader) (io.ReadCloser, error) {
+	return ZstdWithin(kzstd.MaxWindowSize)(r)
+}
+
+// ZstdWithin is Zstd for frames whose window is at most window bytes. The
+// decoder is read ahead of its consumer though it decodes concurrently on
+// its own: its Close and its Read are not safe together, and reading ahead
+// is what keeps a Close from another goroutine off a Read in flight.
+func ZstdWithin(window uint64) func(io.Reader) (io.ReadCloser, error) {
+	return func(r io.Reader) (io.ReadCloser, error) {
+		decoder, err := kzstd.NewReader(r, kzstd.WithDecoderMaxWindow(window))
+		if err != nil {
+			return nil, fmt.Errorf("zstd decoder: %w", err)
+		}
+
+		return ReadAhead(&zstdReader{decoder: decoder}), nil
+	}
 }
 
 // ZstdWriter is the zstd encoder.

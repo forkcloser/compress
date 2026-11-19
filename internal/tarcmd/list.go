@@ -32,7 +32,7 @@ func (l *lister) list(reader *tar.Reader) error {
 		}
 
 		if err != nil {
-			return fmt.Errorf("Unexpected EOF in archive: %w", err)
+			return archiveError(err)
 		}
 
 		if header.Typeflag == tar.TypeXGlobalHeader || !l.members.take(header.Name) {

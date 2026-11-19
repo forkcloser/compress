@@ -57,7 +57,10 @@ guessing.
   option may be given as any unambiguous prefix of its name (`--strip 1`); a read
   without a compression flag picks the decoder by magic, and a known
   compressor given to `-I` (`zstd`, `zstdmt`, `unzstd`, `gzip`, `xz`, …) is
-  the built-in codec, any other a filter run with `-d` to read. Extraction
+  the built-in codec, any other a filter run with `-d` to read. A zstd
+  frame may declare a window of 128 MiB at most, or of two to the power N
+  under `-I 'unzstd --long=N'`, both as for zstd itself: that is how an
+  archive written with `zstd --long=30` is read. Extraction
   goes through `os.Root`, so no entry, however named or linked, lands outside
   the destination; `-P` is GNU's `--absolute-names`, the exception it names:
   names keep their leading slash and `..`, and land where they say, which is
