@@ -28,6 +28,7 @@ import (
 
 	"github.com/forkcloser/compress/internal/codec"
 	"github.com/forkcloser/compress/internal/constants"
+	"github.com/forkcloser/compress/internal/sparse"
 )
 
 // Tar returns a reader that yields a tar archive of fsys, as archive/tar's
@@ -91,7 +92,13 @@ func (t *trackedWriter) Write(p []byte) (int, error) {
 // Untar extracts a tar archive from reader into root: its directories, with
 // the module's directory permissions, and its regular files, with the
 // module's file permissions; the archive's own modes are not applied, and
-// every other kind of entry, symlinks included, is skipped. Every create
+// every other kind of entry, symlinks included, is skipped. A sparse file
+// is extracted with its holes left as holes: it takes on disk about what
+// the archive carries of it, and the time to pass over the rest, which
+// grows with the size it states. That size is the archive's to state,
+// whatever its own length, and nothing stops Untar while it passes over a
+// hole: an archive that is not trusted can keep it for as long a file as
+// the filesystem allows. Every create
 // goes through root, which confines it to the root's directory at the OS
 // level: an entry named to land outside, by "..", an absolute name or a
 // symlink in the tree, is refused by root, and that refusal, like any
@@ -129,14 +136,14 @@ func untarEntry(tarReader *tar.Reader, source *codec.Source, header *tar.Header,
 		if err := root.MkdirAll(name, constants.DirPermissions); err != nil {
 			return fmt.Errorf("%w: mkdir %s: %w", ErrDestination, header.Name, err)
 		}
-	case tar.TypeReg:
+	case tar.TypeReg, tar.TypeGNUSparse:
 		if dir := path.Dir(name); dir != "." {
 			if err := root.MkdirAll(dir, constants.DirPermissions); err != nil {
 				return fmt.Errorf("%w: mkdir %s: %w", ErrDestination, dir, err)
 			}
 		}
 
-		if err := extractFile(root, name, tarReader, source); err != nil {
+		if err := extractFile(root, name, tarReader, source, header); err != nil {
 			return fmt.Errorf("write %s: %w", header.Name, err)
 		}
 	default:
@@ -146,16 +153,31 @@ func untarEntry(tarReader *tar.Reader, source *codec.Source, header *tar.Header,
 	return nil
 }
 
-// extractFile writes the entry's content to name under root. A file whose
+// extractFile writes the entry's content to name under root, a sparse
+// entry's with its holes left out. A file whose
 // content could not be written whole is removed, so a failed extraction
 // leaves no partial file that a later run would take for the entry.
-func extractFile(root *os.Root, name string, content io.Reader, source *codec.Source) error {
+func extractFile(
+	root *os.Root, name string, content io.Reader, source *codec.Source, header *tar.Header,
+) error {
 	out, err := root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, constants.FilePermissions)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrDestination, err)
 	}
 
 	file := &trackedWriter{writer: out}
+
+	if sparse.Member(header) {
+		holes, err := sparse.NewWriter(out, header.Size)
+		if err != nil {
+			_ = out.Close()
+			_ = root.Remove(name)
+
+			return fmt.Errorf("%w: %w", ErrDestination, err)
+		}
+
+		file.writer = holes
+	}
 
 	if _, err := io.Copy(file, content); err != nil {
 		_ = out.Close()
