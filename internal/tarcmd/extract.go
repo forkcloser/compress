@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/forkcloser/compress/internal/constants"
+	"github.com/forkcloser/compress/internal/sparse"
 )
 
 const (
@@ -121,7 +122,7 @@ func (e *extractor) entry(reader *tar.Reader, header *tar.Header) {
 	switch header.Typeflag {
 	case tar.TypeDir:
 		err = e.dir(name, header)
-	case tar.TypeReg:
+	case tar.TypeReg, tar.TypeGNUSparse:
 		err = e.file(reader, name, header)
 	case tar.TypeSymlink:
 		err = e.symlink(name, header)
@@ -250,7 +251,7 @@ func (e *extractor) file(reader io.Reader, name string, header *tar.Header) erro
 		return fmt.Errorf("Cannot open: %w", errReason(err))
 	}
 
-	if _, err := io.Copy(f, reader); err != nil {
+	if err := writeContent(f, reader, header); err != nil {
 		_ = f.Close()
 
 		return fmt.Errorf("Cannot write: %w", errReason(err))
@@ -270,6 +271,34 @@ func (e *extractor) file(reader io.Reader, name string, header *tar.Header) erro
 		if err := e.root.Chtimes(name, header.ModTime, header.ModTime); err != nil {
 			return fmt.Errorf("Cannot utime: %w", errReason(err))
 		}
+	}
+
+	return nil
+}
+
+// writeContent writes a member's content to its file. A sparse member reads
+// as its whole size, the holes as zeros: they are left as holes, as GNU tar
+// leaves them.
+func writeContent(file *os.File, reader io.Reader, header *tar.Header) error {
+	if !sparse.Member(header) {
+		_, err := io.Copy(file, reader)
+
+		return err //nolint:wrapcheck // worded by the caller
+	}
+
+	holes, err := sparse.NewWriter(file, header.Size)
+	if err != nil {
+		return err
+	}
+
+	if _, err := io.Copy(holes, reader); err != nil {
+		// The file got its size first: what is left is as long as what
+		// was written of it, as any file that failed is.
+		if written, seekErr := file.Seek(0, io.SeekCurrent); seekErr == nil {
+			_ = file.Truncate(written)
+		}
+
+		return err //nolint:wrapcheck // worded by the caller
 	}
 
 	return nil
