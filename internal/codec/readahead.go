@@ -64,8 +64,8 @@ type readAhead struct {
 	decoder io.ReadCloser
 	blocks  chan block
 	spare   chan []byte
-	stop    chan struct{} // closed by Close: the goroutine returns
-	closed  chan struct{} // closed by Close, first: a Read returns ErrClosed
+	stop    chan struct{} // closed by Close, first: the goroutine returns
+	closed  chan struct{} // closed by Close: a Read returns ErrClosed
 	done    chan struct{} // closed by the goroutine on its way out
 
 	current []byte // the block being handed out, a spare
@@ -120,8 +120,10 @@ func (r *readAhead) Close() error {
 	var err error
 
 	r.once.Do(func() {
-		close(r.closed)
+		// The goroutine is told before a Read is: a Read that answers
+		// ErrClosed is one the goroutine reads no further under.
 		close(r.stop)
+		close(r.closed)
 		<-r.done
 
 		err = r.decoder.Close()
@@ -136,6 +138,14 @@ func (r *readAhead) decode() {
 	defer close(r.done)
 
 	for {
+		// Stop comes first: a select that also holds a spare would take it
+		// half the time, and Close would wait for one more Read.
+		select {
+		case <-r.stop:
+			return
+		default:
+		}
+
 		var buf []byte
 
 		select {
@@ -144,7 +154,7 @@ func (r *readAhead) decode() {
 			return
 		}
 
-		n, err := fill(r.decoder, buf)
+		n, err := r.fill(buf)
 
 		if n > 0 {
 			select {
@@ -165,18 +175,33 @@ func (r *readAhead) decode() {
 	}
 }
 
-// fill reads into buf until it is full or the decoder ends. Not io.ReadFull:
-// that reports a decoder's own io.ErrUnexpectedEOF (a truncated stream) and
-// its own short read at a clean end the same way, and the two must differ.
-func fill(decoder io.Reader, buf []byte) (int, error) {
+// fill reads into buf until it is full or the decoder ends, and no longer
+// than the caller can wait: it returns what it has once Close has come, and
+// once the caller has nothing queued, so that Close waits for the decoder's
+// current Read and no more, and bytes the decoder has given are not held
+// for a block to fill. A caller that is behind still gets whole blocks. Not
+// io.ReadFull: that reports a decoder's own io.ErrUnexpectedEOF (a
+// truncated stream) and its own short read at a clean end the same way, and
+// the two must differ.
+func (r *readAhead) fill(buf []byte) (int, error) {
 	n := 0
 
 	for n < len(buf) {
-		m, err := decoder.Read(buf[n:])
+		m, err := r.decoder.Read(buf[n:])
 		n += m
 
 		if err != nil {
 			return n, err //nolint:wrapcheck // the decoder's error, as the decoder reports it
+		}
+
+		select {
+		case <-r.stop:
+			return n, nil
+		default:
+		}
+
+		if n > 0 && len(r.blocks) == 0 {
+			return n, nil
 		}
 	}
 
