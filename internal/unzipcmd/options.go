@@ -114,39 +114,30 @@ func (o *options) cluster(letters string, following []string, excluding *bool) (
 }
 
 // match is Info-ZIP's wildcard match: "*" is any run of characters, "/"
-// included, "?" any one character.
+// included, "?" any one character. Only the last "*" is ever taken back,
+// one character further each time: an earlier one already holds the
+// shortest run that lets the pattern get this far, and a longer one opens
+// nothing the last cannot reach. Trying every "*" again costs the name's
+// length to the power of their number, on a name the archive chooses.
 func match(pattern, name string) bool {
-	for pattern != "" {
-		switch pattern[0] {
-		case '*':
-			return matchStar(strings.TrimLeft(pattern, "*"), name)
-		case '?':
-			if name == "" {
-				return false
-			}
+	inPattern, inName := 0, 0
+	star, resume := -1, 0
+
+	for inName < len(name) {
+		switch {
+		case inPattern < len(pattern) && pattern[inPattern] == '*':
+			star, resume = inPattern, inName
+			inPattern++
+		case inPattern < len(pattern) && (pattern[inPattern] == '?' || pattern[inPattern] == name[inName]):
+			inPattern++
+			inName++
+		case star >= 0:
+			resume++
+			inPattern, inName = star+1, resume
 		default:
-			if name == "" || name[0] != pattern[0] {
-				return false
-			}
-		}
-
-		pattern, name = pattern[1:], name[1:]
-	}
-
-	return name == ""
-}
-
-// matchStar matches what follows a "*" against every suffix of name.
-func matchStar(rest, name string) bool {
-	if rest == "" {
-		return true
-	}
-
-	for i := range len(name) + 1 {
-		if match(rest, name[i:]) {
-			return true
+			return false
 		}
 	}
 
-	return false
+	return strings.Trim(pattern[inPattern:], "*") == ""
 }

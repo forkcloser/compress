@@ -365,9 +365,9 @@ func TestMembers(t *testing.T) {
 		t.Errorf("a.txt: %v", err)
 	}
 
-	status, stdout, _ := run(t, "-q", archive, "nope", "-d", t.TempDir())
-	if status != unzipcmd.ExitNoMatch || !strings.Contains(stdout, "caution: filename not matched:  nope") {
-		t.Errorf("no match: exit %d, stdout %q", status, stdout)
+	status, _, stderr := run(t, "-q", archive, "nope", "-d", t.TempDir())
+	if status != unzipcmd.ExitNoMatch || !strings.Contains(stderr, "caution: filename not matched:  nope") {
+		t.Errorf("no match: exit %d, stderr %q", status, stderr)
 	}
 
 	status, _, _ = run(t, "-q", archive, "d/a.txt", "nope", "-d", t.TempDir())

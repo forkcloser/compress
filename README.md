@@ -86,7 +86,8 @@ guessing.
   [-d dir]` with `-q`, `-o`, `-n`, `-l`, `-t`, `-p`, `-j`; patterns take `*`
   and `?`. Extraction goes through `os.Root` like tar's. Exit statuses are
   Info-ZIP's: 1 after a warning, 9 for a missing archive, 10 for a usage
-  error, 11 when no member matched.
+  error, 11 when no member matched; an encrypted member is skipped (5), as
+  is one of a compression method it cannot read (81).
 
 xz's compression ratio is forkcloser/xz's, below the C tool's at the same
 preset; decoding is at parity.

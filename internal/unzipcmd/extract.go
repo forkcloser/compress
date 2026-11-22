@@ -26,6 +26,30 @@ const (
 	extTimeExtraID = 0x5455
 	ntfsExtraID    = 0x000a
 	unixExtraID    = 0x5855
+
+	// encryptedFlag is the general-purpose bit of an entry whose data is
+	// encrypted.
+	encryptedFlag = 0x1
+
+	// The creators, in the high byte of an entry's creator version, whose
+	// entries Info-ZIP takes a unix mode from; every other leaves DOS
+	// attributes, of which the read-only bit is the one that maps to a mode.
+	creatorFAT  = 0
+	creatorUnix = 3
+	dosReadOnly = 0x1
+
+	// What an entry without a unix mode is created with, for the umask to
+	// take from.
+	anyFile      os.FileMode = 0o666
+	anyDirectory os.FileMode = 0o777
+	writeBits    os.FileMode = 0o222
+	ownerBits    os.FileMode = 0o700
+)
+
+// The entries Info-ZIP skips rather than fails, in its words.
+var (
+	errPassword = errors.New("unable to get password")
+	errMethod   = errors.New("unsupported compression method")
 )
 
 // extractor writes an archive's entries under one directory, through an
@@ -37,8 +61,8 @@ type extractor struct {
 	stderr io.Writer
 	status int
 
-	// dirs are the directories extracted, in order, for the modes and
-	// times set once their content is in place.
+	// dirs are the directories an entry created, in order, for the modes
+	// and times set once their content is in place.
 	dirs []dirEntry
 }
 
@@ -46,6 +70,35 @@ type dirEntry struct {
 	name    string
 	mode    os.FileMode
 	modTime time.Time
+}
+
+// permissions is the mode an entry is created with, and whether it is one
+// the archive stored, to be set exactly once the entry is written. An entry
+// from a creator without unix modes has none: archive/zip makes up 0666 for
+// it, which set exactly would go past the umask and leave a directory
+// nobody can enter. Its mode is what the umask leaves at creation, less the
+// write bits when the archive has it read-only.
+func permissions(file *zip.File, mode, fallback, anything os.FileMode) (os.FileMode, bool) {
+	if file.ExternalAttrs&dosReadOnly != 0 {
+		anything &^= writeBits
+	}
+
+	switch file.CreatorVersion >> 8 {
+	case creatorUnix:
+		if perm := mode.Perm(); perm != 0 {
+			return perm, true
+		}
+
+		return fallback, true
+	case creatorFAT:
+		// A unix tool that signs as FAT keeps its mode where unix does;
+		// Info-ZIP takes it when the owner's bits agree with the DOS ones.
+		if perm := os.FileMode(file.ExternalAttrs >> 16).Perm(); perm&ownerBits == anything&ownerBits {
+			return perm, true
+		}
+	}
+
+	return anything, false
 }
 
 func (e *extractor) warnf(format string, args ...any) {
@@ -57,9 +110,27 @@ func (e *extractor) warnf(format string, args ...any) {
 }
 
 func (e *extractor) errorf(format string, args ...any) {
-	e.status = ExitError
+	e.status = worse(e.status, ExitError)
 
 	fmt.Fprintf(e.stderr, format+"\n", args...)
+}
+
+// open is an entry's data, or nothing once the reason is reported. It comes
+// before anything is done in the entry's place: what cannot be read
+// replaces nothing.
+func (e *extractor) open(name string, file *zip.File) (io.ReadCloser, bool) {
+	data, err := content(file)
+	if err == nil {
+		return data, true
+	}
+
+	if status := skipped(e.stderr, file.Name, err, e.opts.quiet); status != ExitOK {
+		e.status = worse(e.status, status)
+	} else {
+		e.errorf("%s:  %v", e.display(name), err)
+	}
+
+	return nil, false
 }
 
 // entry extracts one entry: a directory, a symbolic link, or a file.
@@ -131,15 +202,33 @@ func (e *extractor) display(name string) string {
 }
 
 func (e *extractor) directory(name string, file *zip.File, mode os.FileMode) {
-	perm := mode.Perm()
-	if perm == 0 {
-		perm = constants.DirPermissions
+	if !e.parents(name) {
+		return
 	}
 
-	if err := e.root.MkdirAll(name, perm|constants.OwnerAccess); err != nil {
-		e.errorf("checkdir error:  cannot create %s: %v", e.display(name), reason(err))
+	perm, stored := permissions(file, mode, constants.DirPermissions, anyDirectory)
+
+	// A directory that is already there is not this run's to give a mode or
+	// a time to: the entry creates nothing, and nothing is said of it.
+	if err := e.root.Mkdir(name, perm|constants.OwnerAccess); err != nil {
+		if info, statErr := e.root.Stat(name); statErr != nil || !info.IsDir() {
+			e.errorf("checkdir error:  cannot create %s: %v", e.display(name), reason(err))
+		}
 
 		return
+	}
+
+	if !stored {
+		// A mode made up here takes nothing back from the umask the
+		// directory was created through.
+		info, err := e.root.Stat(name)
+		if err != nil {
+			e.warnf("%s:  cannot set mode: %v", e.display(name), reason(err))
+
+			return
+		}
+
+		perm &= info.Mode().Perm()
 	}
 
 	e.dirs = append(e.dirs, dirEntry{name: name, mode: perm, modTime: modTime(file)})
@@ -188,14 +277,18 @@ func (e *extractor) exists(name string) bool {
 }
 
 func (e *extractor) file(name string, file *zip.File, mode os.FileMode) {
+	data, ok := e.open(name, file)
+	if !ok {
+		return
+	}
+
+	defer func() { _ = data.Close() }() // read-only: a close error carries nothing
+
 	if !e.parents(name) || e.exists(name) {
 		return
 	}
 
-	perm := mode.Perm()
-	if perm == 0 {
-		perm = constants.FilePermissions
-	}
+	perm, stored := permissions(file, mode, constants.FilePermissions, anyFile)
 
 	out, err := e.root.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, perm)
 	if err != nil {
@@ -204,7 +297,7 @@ func (e *extractor) file(name string, file *zip.File, mode os.FileMode) {
 		return
 	}
 
-	if err := copyContent(out, file); err != nil {
+	if err := copyData(out, data); err != nil {
 		_ = out.Close()
 		_ = e.root.Remove(name)
 
@@ -220,9 +313,11 @@ func (e *extractor) file(name string, file *zip.File, mode os.FileMode) {
 	}
 
 	// The stored mode exactly, as Info-ZIP restores it: the create above went
-	// through the umask.
-	if err := e.root.Chmod(name, perm); err != nil {
-		e.warnf("%s:  cannot set mode: %v", e.display(name), reason(err))
+	// through the umask, which is where a mode made up here has to stay.
+	if stored {
+		if err := e.root.Chmod(name, perm); err != nil {
+			e.warnf("%s:  cannot set mode: %v", e.display(name), reason(err))
+		}
 	}
 
 	// Info-ZIP restores the time it stored; a refusal is not worth the entry.
@@ -238,16 +333,59 @@ func (e *extractor) file(name string, file *zip.File, mode os.FileMode) {
 	}
 }
 
-// copyContent writes an entry's data; the archive's CRC is checked at its end.
-func copyContent(out io.Writer, file *zip.File) error {
-	content, err := file.Open()
-	if err != nil {
-		return fmt.Errorf("cannot open entry: %w", err)
+// content opens an entry's data. An encrypted entry would open and inflate
+// as garbage, so it is refused here, as is a method with no decompressor.
+func content(file *zip.File) (io.ReadCloser, error) {
+	if file.Flags&encryptedFlag != 0 {
+		return nil, errPassword
 	}
 
-	defer func() { _ = content.Close() }() // read-only: a close error carries nothing
+	data, err := file.Open()
+	if errors.Is(err, zip.ErrAlgorithm) {
+		return nil, fmt.Errorf("%w %d", errMethod, file.Method)
+	}
 
-	if _, err := io.Copy(out, content); err != nil { // #nosec G110 -- extracting the entry is the command
+	if err != nil {
+		return nil, fmt.Errorf("cannot open entry: %w", err)
+	}
+
+	return data, nil
+}
+
+// skipped writes Info-ZIP's line for an entry it skips, under the name the
+// archive has for it, and is the status that leaves the run with: none for
+// any other error. Quiet drops the line for a method, never the password's.
+func skipped(out io.Writer, name string, err error, quiet bool) int {
+	switch {
+	case errors.Is(err, errPassword):
+		fmt.Fprintf(out, "%11s: %-22s  %v\n", "skipping", name, err)
+
+		return ExitPassword
+	case errors.Is(err, errMethod):
+		if !quiet {
+			fmt.Fprintf(out, "%11s: %-22s  %v\n", "skipping", name, err)
+		}
+
+		return ExitUnsupported
+	default:
+		return ExitOK
+	}
+}
+
+// copyContent writes an entry's data; the archive's CRC is checked at its end.
+func copyContent(out io.Writer, file *zip.File) error {
+	data, err := content(file)
+	if err != nil {
+		return err
+	}
+
+	defer func() { _ = data.Close() }() // read-only: a close error carries nothing
+
+	return copyData(out, data)
+}
+
+func copyData(out io.Writer, data io.Reader) error {
+	if _, err := io.Copy(out, data); err != nil { // #nosec G110 -- extracting the entry is the command
 		if errors.Is(err, zip.ErrChecksum) {
 			return errors.New("bad CRC") //nolint:err113 // Info-ZIP's words
 		}
@@ -259,23 +397,21 @@ func copyContent(out io.Writer, file *zip.File) error {
 }
 
 func (e *extractor) symlink(name string, file *zip.File) {
-	if !e.parents(name) || e.exists(name) {
+	data, ok := e.open(name, file)
+	if !ok {
 		return
 	}
 
-	content, err := file.Open()
-	if err != nil {
-		e.errorf("%s:  cannot open entry: %v", e.display(name), err)
-
-		return
-	}
-
-	target, err := io.ReadAll(io.LimitReader(content, linkTargetCap))
-	_ = content.Close()
+	target, err := io.ReadAll(io.LimitReader(data, linkTargetCap))
+	_ = data.Close()
 
 	if err != nil {
 		e.errorf("%s:  %v", e.display(name), err)
 
+		return
+	}
+
+	if !e.parents(name) || e.exists(name) {
 		return
 	}
 
