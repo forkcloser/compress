@@ -12,9 +12,11 @@
 // The archive is never one of its own inputs. Options: -r, -q, -0 through
 // -9, -X, -@, -o, -j, -D, -h, -v. An archive named "-" is written to
 // standard output, and the entry lines then go to standard error. Symbolic
-// links are followed, as Info-ZIP does without -y, except that -r does not
-// walk into a link to a directory. A FIFO or a device is never opened: it
-// is skipped with a warning. A file that deflate does not shrink is
+// links are followed, as Info-ZIP does without -y, and -r walks into a link
+// to a directory, but for one that leads back to a directory it is under,
+// which is stored as an entry and reported, where Info-ZIP walks it for as
+// deep as the system resolves the path. A FIFO or a device is never opened:
+// it is skipped with a warning. A file that deflate does not shrink is
 // deflated all the same, where Info-ZIP would store it. Anything else is a
 // usage error.
 //

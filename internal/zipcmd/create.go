@@ -10,6 +10,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -197,8 +198,9 @@ func spelling(fsPath string) string {
 
 // directory adds a directory: its own entry unless -D or -j, and with -r
 // its content, in name order. A symbolic link under it is stored as what
-// it points to, as Info-ZIP does without -y; one that points to a
-// directory is stored as that directory's entry alone, not walked.
+// it points to, as Info-ZIP does without -y: a file's content, and a
+// directory with what is under it, unless the link leads back to a
+// directory it is under.
 func (c *creator) directory(entries []entry, dir string) []entry {
 	if !c.opts.recurse {
 		info, err := os.Stat(dir)
@@ -211,7 +213,13 @@ func (c *creator) directory(entries []entry, dir string) []entry {
 		return c.add(entries, dir, info)
 	}
 
-	walk(dir, func(fsPath string, err error) {
+	walk(dir, nil, func(fsPath string, err error) {
+		if errors.Is(err, errLeadsBack) {
+			c.warnf("link back to a directory it is under, not followed: %s", fsPath)
+
+			return
+		}
+
 		if err != nil {
 			c.warnf("could not open for reading: %s", fsPath)
 			c.status = ExitInput
@@ -234,12 +242,22 @@ func (c *creator) directory(entries []entry, dir string) []entry {
 	return entries
 }
 
+// errLeadsBack is what walk visits a link with when it leads to a directory
+// the walk is already under.
+var errLeadsBack = errors.New("link back to a directory it is under")
+
 // walk visits dir and everything under it in lexical order, a directory
 // before its entries, as filepath.WalkDir does; a directory that cannot be
 // read is visited again with the error and not descended. Not WalkDir: its
 // directory handles lack the share mode that lets another process rename or
-// remove what is being archived on Windows.
-func walk(dir string, visit func(fsPath string, err error)) {
+// remove what is being archived on Windows, and it does not enter a link to
+// a directory, which Info-ZIP enters.
+//
+// above is the directories the walk is under. A link that leads to one of
+// them is visited as an entry, then again with errLeadsBack, and not
+// entered: Info-ZIP enters it for as deep as the system resolves the path,
+// which with two such links in a directory does not end.
+func walk(dir string, above []fs.FileInfo, visit func(fsPath string, err error)) {
 	visit(dir, nil)
 
 	entries, err := xos.ReadDir(dir)
@@ -249,16 +267,40 @@ func walk(dir string, visit func(fsPath string, err error)) {
 		return
 	}
 
+	if self, statErr := os.Stat(dir); statErr == nil {
+		above = append(slices.Clip(above), self)
+	}
+
 	for _, entry := range entries {
 		fsPath := filepath.Join(dir, entry.Name())
-		if entry.IsDir() {
-			walk(fsPath, visit)
 
-			continue
+		switch target := linkedDirectory(entry, fsPath); {
+		case entry.IsDir():
+			walk(fsPath, above, visit)
+		case target == nil:
+			visit(fsPath, nil)
+		case slices.ContainsFunc(above, func(held fs.FileInfo) bool { return os.SameFile(held, target) }):
+			visit(fsPath, nil)
+			visit(fsPath, errLeadsBack)
+		default:
+			walk(fsPath, above, visit)
 		}
-
-		visit(fsPath, nil)
 	}
+}
+
+// linkedDirectory is the directory that entry, a symbolic link at fsPath,
+// leads to, or nil when entry is no such link.
+func linkedDirectory(entry fs.DirEntry, fsPath string) fs.FileInfo {
+	if entry.Type()&fs.ModeSymlink == 0 {
+		return nil
+	}
+
+	info, err := os.Stat(fsPath)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+
+	return info
 }
 
 // add appends one input under its archive name, or skips it: the archive
