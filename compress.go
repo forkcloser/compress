@@ -210,7 +210,20 @@ func Decompress(reader io.Reader) (io.ReadCloser, error) {
 		}
 	}
 
-	return nil, fmt.Errorf("%w (header: %x)", ErrUnknownFormat, header)
+	return nil, unrecognized(source, header, peek)
+}
+
+// unrecognized is the error for a header that is no registered format's. A
+// source that failed before it gave peek bytes, the longest magic, is that
+// failure, not a format nobody knows: what it had given proves nothing. A
+// whole header that is no format's is unknown however the source fares
+// after it.
+func unrecognized(source *codec.Source, header []byte, peek int) error {
+	if failure := source.Failure(); failure != nil && len(header) < peek {
+		return fmt.Errorf("%w: %w", ErrSource, failure)
+	}
+
+	return fmt.Errorf("%w (header: %x)", ErrUnknownFormat, header)
 }
 
 // errStreamPath says a seekable input is the stream path's after all: its
