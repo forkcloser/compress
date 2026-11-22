@@ -130,6 +130,9 @@ func createWrap(opts *options) compression {
 	return compressNone
 }
 
+// archivePermissions is a new archive's mode, before the umask.
+const archivePermissions = 0o666
+
 // create writes the archive to the -f file, or to stdout.
 func create(opts *options, stdout, stderr io.Writer) (bool, error) {
 	out, verbose := stdout, stderr // on stdout, the archive; the names go where they do not corrupt it
@@ -137,7 +140,10 @@ func create(opts *options, stdout, stderr io.Writer) (bool, error) {
 	var file *os.File
 
 	if opts.archive != "" && opts.archive != "-" {
-		created, err := xos.Create(opts.archive)
+		// For writing only: opened for reading too, a fifo does not wait for
+		// its reader and the archive is lost with the process, and a file
+		// its owner may only write is refused.
+		created, err := xos.OpenFile(opts.archive, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, archivePermissions)
 		if err != nil {
 			return false, fmt.Errorf("%s: Cannot open: %w", opts.archive, errReason(err))
 		}
