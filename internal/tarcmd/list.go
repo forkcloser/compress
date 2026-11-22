@@ -35,7 +35,8 @@ func (l *lister) list(reader *tar.Reader) error {
 			return archiveError(err)
 		}
 
-		if header.Typeflag == tar.TypeXGlobalHeader || !l.members.take(header.Name) {
+		if header.Typeflag == tar.TypeXGlobalHeader || !l.members.take(header.Name) ||
+			excluded(l.opts.excludes, header.Name) {
 			continue
 		}
 
