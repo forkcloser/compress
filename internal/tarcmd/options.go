@@ -75,6 +75,7 @@ type options struct {
 	absoluteNames   bool     // -P: names keep their leading slash and their ".."
 	excludes        []string // --exclude patterns
 	program         string   // --use-compress-program, when not a known compressor
+	zstdWindow      uint64   // the window a zstd frame may declare under --long, 0 without it
 	dir             string   // the last -C, for extract and list
 	members         []member // in order: what create archives, what extract and list take
 	help            bool
@@ -373,10 +374,52 @@ func (o *options) addExclude(pattern string) error {
 	return nil
 }
 
+// zstd's --long takes a window of 2^10 to 2^31 bytes, 2^27 when it names none.
+const (
+	minWindowLog     = 10
+	maxWindowLog     = 31
+	defaultWindowLog = 27
+)
+
+// setZstdWindow reads --long among a zstd program's arguments: the window a
+// frame may declare is then two to that power, above the default or below
+// it, and of several --long the first is the one, both as for zstd itself.
+func (o *options) setZstdWindow(arguments []string) error {
+	o.zstdWindow = 0
+
+	for _, argument := range arguments {
+		value, isLong := strings.CutPrefix(argument, "--long")
+		if !isLong {
+			continue
+		}
+
+		log := defaultWindowLog
+
+		if value != "" {
+			digits, isValue := strings.CutPrefix(value, "=")
+
+			parsed, err := strconv.Atoi(digits)
+			if !isValue || err != nil || parsed < minWindowLog || parsed > maxWindowLog {
+				return usage("%s: the window is two to a power of %d to %d", argument, minWindowLog, maxWindowLog)
+			}
+
+			log = parsed
+		}
+
+		if o.zstdWindow == 0 {
+			o.zstdWindow = 1 << log
+		}
+	}
+
+	return nil
+}
+
 // setCompressProgram is --use-compress-program: a compressor the command
-// knows by name (zstd, zstdmt, unzstd, gzip, xz, …) is its own codec, its
-// arguments being tuning that changes nothing in the stream; any other
-// program is run as a filter.
+// knows by name (zstd, zstdmt, unzstd, gzip, xz, …) is its own codec, and
+// any other program is run as a filter. A known compressor's arguments are
+// tuning that changes nothing in what the codec reads or writes, but for
+// zstd's --long, which is what lets a frame with a window over the default
+// be read.
 func (o *options) setCompressProgram(program string) error {
 	fields := strings.Fields(program)
 	if len(fields) == 0 {
@@ -386,6 +429,10 @@ func (o *options) setCompressProgram(program string) error {
 	if known, ok := knownProgram(fields[0]); ok {
 		o.compression = known
 		o.program = ""
+
+		if known == compressZstd {
+			return o.setZstdWindow(fields[1:])
+		}
 
 		return nil
 	}
