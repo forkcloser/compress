@@ -158,7 +158,9 @@ func create(opts *options, stdout, stderr io.Writer) (bool, error) {
 		return false, err
 	}
 
-	archiver := &creator{opts: opts, writer: tar.NewWriter(compressor), verbose: verbose, stderr: stderr}
+	archiver := &creator{
+		opts: opts, writer: tar.NewWriter(compressor), verbose: verbose, stderr: stderr, archive: regular(out),
+	}
 
 	for _, m := range opts.members {
 		if err := archiver.addMember(m); err != nil {
@@ -181,6 +183,23 @@ func create(opts *options, stdout, stderr io.Writer) (bool, error) {
 	}
 
 	return archiver.failed, nil
+}
+
+// regular is what out is written to when that is a regular file, the -f
+// file or a redirected standard output, and nil otherwise: a pipe or a
+// terminal is no member of any tree.
+func regular(out io.Writer) os.FileInfo {
+	file, ok := out.(*os.File)
+	if !ok {
+		return nil
+	}
+
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return nil
+	}
+
+	return info
 }
 
 // openArchive opens the archive to read, -f's file or stdin, through the

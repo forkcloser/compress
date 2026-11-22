@@ -24,6 +24,7 @@ type creator struct {
 	writer  *tar.Writer
 	verbose io.Writer // where -v prints names: stdout, or stderr when the archive is stdout
 	stderr  io.Writer
+	archive os.FileInfo // the file the archive is written to, nil when it is not a regular file
 
 	// given is the command-line member being archived, as it was named,
 	// and base the archive name it got: --exclude matches a name as the
@@ -290,10 +291,18 @@ func (c *creator) archived(archiveName string, entries []os.DirEntry) []string {
 }
 
 // header builds the entry for one path: the file's own metadata, then the
-// options' overrides. A socket has no entry and is nil.
+// options' overrides. A socket has no entry and is nil, and so is the
+// archive itself, met in the tree it is written in.
 func (c *creator) header(fsPath, archiveName string, info os.FileInfo) (*tar.Header, error) {
 	if info.Mode()&os.ModeSocket != 0 {
 		fmt.Fprintf(c.stderr, "tar: %s: socket ignored\n", archiveName)
+
+		return nil, nil //nolint:nilnil // no entry, and nothing wrong
+	}
+
+	// By identity, not by name: a hard link to the archive is the archive.
+	if c.archive != nil && os.SameFile(c.archive, info) {
+		fmt.Fprintf(c.stderr, "tar: %s: archive cannot contain itself; not dumped\n", archiveName)
 
 		return nil, nil //nolint:nilnil // no entry, and nothing wrong
 	}
