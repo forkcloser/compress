@@ -16,7 +16,8 @@
 // and bsdtar take them. Anything else is a usage error. Members named for --extract or
 // --list, on the command line or in -T files, select the entries taken: a
 // name as the archive carries it, or a directory with everything under it;
-// one no entry carries is reported and the status is 2.
+// one no entry carries is reported and the status is 2. A sparse member is
+// extracted with its holes left as holes.
 //
 // Exit status is GNU's: 0, 2 after any error (a fatal one stops the run, a
 // per-member one is reported and the run goes on), 64 for a usage error.
