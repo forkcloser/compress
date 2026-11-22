@@ -85,18 +85,13 @@ func Bzip2(r io.Reader) (io.ReadCloser, error) {
 	return ReadAhead(io.NopCloser(gobzip2.NewReader(r))), nil
 }
 
-// Lz4 is the lz4 decoder, decoding frame blocks on GOMAXPROCS goroutines.
-// Abandoning a partially consumed reader parks those workers and their
-// block buffers for good, as the library has no cancellation: a consumer
-// that stops short of EOF by design (a tar reader halting at the
-// end-of-archive marker) must drain the rest before dropping the reader.
+// Lz4 is the lz4 decoder, decoding in order and read ahead of its consumer
+// as the other serial decoders are. Not on several goroutines, which the
+// library offers: a reader left before its end keeps them parked with
+// their block buffers, and the library's Reset, which lets them go,
+// returns while one of them may still read the source.
 func Lz4(r io.Reader) (io.ReadCloser, error) {
-	decoder := plz4.NewReader(r)
-	if err := decoder.Apply(plz4.ConcurrencyOption(-1)); err != nil {
-		return nil, fmt.Errorf("lz4 concurrency: %w", err)
-	}
-
-	return io.NopCloser(decoder), nil
+	return ReadAhead(io.NopCloser(plz4.NewReader(r))), nil
 }
 
 // Lz4Writer is the lz4 encoder.
