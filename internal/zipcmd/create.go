@@ -6,23 +6,28 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"math/rand/v2"
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/klauspost/compress/flate"
 
 	"github.com/forkcloser/xos"
-
-	"github.com/forkcloser/compress/internal/constants"
 )
 
 const (
 	// dosEpoch is the first year the DOS date field can hold.
 	dosEpoch = 1980
 	percent  = 100
+	// newArchivePerm is a new archive's mode before the umask.
+	newArchivePerm fs.FileMode = 0o666
+	// tempAttempts bounds the retries on a name that is taken.
+	tempAttempts = 10000
 )
 
 var errRepeated = errors.New("cannot repeat names in zip file")
@@ -39,7 +44,13 @@ type creator struct {
 	opts   *options
 	stdout io.Writer
 	stderr io.Writer
+	// lines is where the entry lines go: standard output, unless the
+	// archive does.
+	lines io.Writer
 
+	// self is the archive as this run finds it, nil when there is none yet
+	// or it is standard output.
+	self fs.FileInfo
 	// pending is the entry whose line waits for its sizes, which the writer
 	// settles only when the next entry begins or the archive closes.
 	pending *pendingEntry
@@ -63,6 +74,16 @@ func (c *creator) errorf(status int, format string, args ...any) int {
 }
 
 func (c *creator) run() int {
+	var target string
+
+	if c.opts.archive == "-" {
+		c.lines = c.stderr
+	} else {
+		c.lines = c.stdout
+		target = archiveName(c.opts.archive)
+		c.self, _ = os.Stat(target)
+	}
+
 	entries, err := c.collect()
 	if err != nil {
 		return c.errorf(ExitUsage, "%v (%v)", errUsage, err)
@@ -75,8 +96,6 @@ func (c *creator) run() int {
 
 		return c.write(c.stdout, nil, entries)
 	}
-
-	target := archiveName(c.opts.archive)
 
 	existing, err := openExisting(target)
 	if err != nil {
@@ -122,8 +141,9 @@ func openExisting(target string) (*zip.ReadCloser, error) {
 }
 
 // collect resolves the inputs to entries: a missing input is a warning, a
-// directory is its own entry and, with -r, everything under it; a name
-// stored twice is Info-ZIP's usage error.
+// directory is its own entry and, with -r, everything under it. An input
+// named again is stored once; two paths that map to one name are Info-ZIP's
+// usage error.
 func (c *creator) collect() ([]entry, error) {
 	var entries []entry
 
@@ -145,25 +165,42 @@ func (c *creator) collect() ([]entry, error) {
 	}
 
 	seen := make(map[string]string, len(entries))
+	kept := entries[:0]
 
 	for _, item := range entries {
-		if first, dup := seen[item.name]; dup {
+		first, dup := seen[item.name]
+		if !dup {
+			seen[item.name] = item.path
+			kept = append(kept, item)
+
+			continue
+		}
+
+		// The path as it was given, not the file it leads to: one file
+		// spelled two ways is refused, as Info-ZIP refuses it.
+		if spelling(first) != spelling(item.path) {
 			c.warnf("first full name: %s\n\tzip warning: second full name: %s\n\t"+
 				"zip warning: name in zip file repeated: %s", first, item.path, item.name)
 
 			return nil, errRepeated
 		}
-
-		seen[item.name] = item.path
 	}
 
-	return entries, nil
+	return kept, nil
+}
+
+// spelling is a path as two inputs are told apart by: a directory is the
+// same input with or without its trailing separator, and so is a path under
+// either separator where the platform takes both.
+func spelling(fsPath string) string {
+	return strings.TrimRight(filepath.FromSlash(fsPath), string(filepath.Separator))
 }
 
 // directory adds a directory: its own entry unless -D or -j, and with -r
 // its content, in name order. A symbolic link under it is stored as what
-// it points to, as Info-ZIP does without -y; one that points to a
-// directory is stored as that directory's entry alone, not walked.
+// it points to, as Info-ZIP does without -y: a file's content, and a
+// directory with what is under it, unless the link leads back to a
+// directory it is under.
 func (c *creator) directory(entries []entry, dir string) []entry {
 	if !c.opts.recurse {
 		info, err := os.Stat(dir)
@@ -176,7 +213,13 @@ func (c *creator) directory(entries []entry, dir string) []entry {
 		return c.add(entries, dir, info)
 	}
 
-	walk(dir, func(fsPath string, err error) {
+	walk(dir, nil, func(fsPath string, err error) {
+		if errors.Is(err, errLeadsBack) {
+			c.warnf("link back to a directory it is under, not followed: %s", fsPath)
+
+			return
+		}
+
 		if err != nil {
 			c.warnf("could not open for reading: %s", fsPath)
 			c.status = ExitInput
@@ -199,12 +242,22 @@ func (c *creator) directory(entries []entry, dir string) []entry {
 	return entries
 }
 
+// errLeadsBack is what walk visits a link with when it leads to a directory
+// the walk is already under.
+var errLeadsBack = errors.New("link back to a directory it is under")
+
 // walk visits dir and everything under it in lexical order, a directory
 // before its entries, as filepath.WalkDir does; a directory that cannot be
 // read is visited again with the error and not descended. Not WalkDir: its
 // directory handles lack the share mode that lets another process rename or
-// remove what is being archived on Windows.
-func walk(dir string, visit func(fsPath string, err error)) {
+// remove what is being archived on Windows, and it does not enter a link to
+// a directory, which Info-ZIP enters.
+//
+// above is the directories the walk is under. A link that leads to one of
+// them is visited as an entry, then again with errLeadsBack, and not
+// entered: Info-ZIP enters it for as deep as the system resolves the path,
+// which with two such links in a directory does not end.
+func walk(dir string, above []fs.FileInfo, visit func(fsPath string, err error)) {
 	visit(dir, nil)
 
 	entries, err := xos.ReadDir(dir)
@@ -214,21 +267,65 @@ func walk(dir string, visit func(fsPath string, err error)) {
 		return
 	}
 
+	if self, statErr := os.Stat(dir); statErr == nil {
+		above = append(slices.Clip(above), self)
+	}
+
 	for _, entry := range entries {
 		fsPath := filepath.Join(dir, entry.Name())
-		if entry.IsDir() {
-			walk(fsPath, visit)
 
-			continue
+		switch target := linkedDirectory(entry, fsPath); {
+		case entry.IsDir():
+			walk(fsPath, above, visit)
+		case target == nil:
+			visit(fsPath, nil)
+		case slices.ContainsFunc(above, func(held fs.FileInfo) bool { return os.SameFile(held, target) }):
+			visit(fsPath, nil)
+			visit(fsPath, errLeadsBack)
+		default:
+			walk(fsPath, above, visit)
 		}
-
-		visit(fsPath, nil)
 	}
 }
 
-// add appends one input under its archive name, or skips it: a directory
+// linkedDirectory is the directory that entry, a symbolic link at fsPath,
+// leads to, or nil when entry is no such link.
+func linkedDirectory(entry fs.DirEntry, fsPath string) fs.FileInfo {
+	if entry.Type()&fs.ModeSymlink == 0 {
+		return nil
+	}
+
+	info, err := os.Stat(fsPath)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+
+	return info
+}
+
+// add appends one input under its archive name, or skips it: the archive
+// itself, what is neither a directory nor a regular file, a directory
 // under -D or -j, a name that would escape the archive's root.
 func (c *creator) add(entries []entry, fsPath string, info fs.FileInfo) []entry {
+	// By identity, not by name: -r over the directory the archive is in
+	// meets it under another spelling, and would nest it once more each run.
+	if os.SameFile(c.self, info) {
+		return entries
+	}
+
+	// Never opened: a FIFO blocks the open until something writes to it,
+	// and a device may have no end to read to.
+	switch mode := info.Mode(); {
+	case mode&fs.ModeNamedPipe != 0:
+		c.warnf("ignoring FIFO (Named Pipe): %s", fsPath)
+
+		return entries
+	case !mode.IsDir() && !mode.IsRegular():
+		c.warnf("ignoring special file: %s", fsPath)
+
+		return entries
+	}
+
 	if info.IsDir() && (c.opts.noDirEntries || c.opts.junkPaths) {
 		return entries
 	}
@@ -267,10 +364,36 @@ func (c *creator) storedName(fsPath string, isDir bool) (string, bool) {
 	return name, true
 }
 
+// createBeside creates the file an archive is written to before it takes
+// target's name: beside it, so that the move is a rename, under a name of
+// its own, with perm through the umask.
+func createBeside(target string, perm fs.FileMode) (*os.File, error) {
+	prefix := filepath.Join(filepath.Dir(target), "zi")
+
+	for range tempAttempts {
+		// #nosec G404 -- O_EXCL makes the name this file's own, not its secrecy
+		name := prefix + strconv.FormatUint(uint64(rand.Uint32()), 10)
+
+		file, err := xos.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, perm)
+		if !errors.Is(err, fs.ErrExist) {
+			return file, err //nolint:wrapcheck // a PathError names the operation and the file already
+		}
+	}
+
+	return nil, &fs.PathError{Op: "open", Path: prefix + "*", Err: fs.ErrExist}
+}
+
 // writeFile writes the archive beside its final name and moves it into
-// place, so a failure leaves whatever was there.
+// place, so a failure leaves whatever was there. A new archive is created
+// through the umask, as any file is; an update's has the mode of the
+// archive it replaces, and is never more open than that while it is written.
 func (c *creator) writeFile(target string, existing *zip.ReadCloser, entries []entry) int {
-	tmp, err := xos.CreateTemp(filepath.Dir(target), "zi")
+	perm := newArchivePerm
+	if c.self != nil {
+		perm = c.self.Mode().Perm()
+	}
+
+	tmp, err := createBeside(target, perm)
 	if err != nil {
 		return c.errorf(ExitCreate, "Could not create output file (%v)", err)
 	}
@@ -287,8 +410,11 @@ func (c *creator) writeFile(target string, existing *zip.ReadCloser, entries []e
 		return c.errorf(ExitCreate, "Output file write failure (%v)", err)
 	}
 
-	if err := os.Chmod(tmp.Name(), constants.FilePermissions); err != nil {
-		return c.errorf(ExitCreate, "Could not create output file (%v)", err)
+	if c.self != nil {
+		// Past the umask: the mode is the replaced archive's, not a new file's.
+		if err := os.Chmod(tmp.Name(), perm); err != nil {
+			return c.errorf(ExitCreate, "Could not create output file (%v)", err)
+		}
 	}
 
 	if existing != nil {
@@ -323,21 +449,27 @@ func (c *creator) write(out io.Writer, existing *zip.ReadCloser, entries []entry
 
 	done := make([]bool, len(entries))
 
+	var kept []*zip.File
 	if existing != nil {
-		for _, file := range existing.File {
-			if i, ok := replacing[file.Name]; ok {
-				done[i] = true
+		kept = existing.File
+	}
 
-				c.store(writer, entries[i], "updating")
+	for _, file := range kept {
+		if i, ok := replacing[file.Name]; ok {
+			done[i] = true
 
+			if c.store(writer, entries[i], "updating") {
 				continue
 			}
 
-			c.noteTime(file.Modified)
+			// The entry is all the archive has of that input: it stays.
+			c.warnf("will just copy entry over: %s", file.Name)
+		}
 
-			if err := writer.Copy(file); err != nil {
-				return c.errorf(ExitCreate, "Output file write failure (%v)", err)
-			}
+		c.noteTime(file.Modified)
+
+		if err := writer.Copy(file); err != nil {
+			return c.errorf(ExitCreate, "Output file write failure (%v)", err)
 		}
 	}
 
@@ -357,8 +489,9 @@ func (c *creator) write(out io.Writer, existing *zip.ReadCloser, entries []entry
 }
 
 // store writes one entry, opening a file before its header so that an input
-// that cannot be read leaves no trace in the archive.
-func (c *creator) store(writer *zip.Writer, item entry, verb string) {
+// that cannot be read leaves no trace in the archive, and reports false for
+// such an input: nothing was written under its name.
+func (c *creator) store(writer *zip.Writer, item entry, verb string) bool {
 	var source *os.File
 
 	if !item.info.IsDir() {
@@ -369,7 +502,7 @@ func (c *creator) store(writer *zip.Writer, item entry, verb string) {
 			c.warnf("could not open for reading: %s", item.path)
 			c.status = ExitInput
 
-			return
+			return false
 		}
 
 		defer func() { _ = source.Close() }() // read-only: a close error carries nothing
@@ -382,20 +515,22 @@ func (c *creator) store(writer *zip.Writer, item entry, verb string) {
 		c.warnf("could not write %s: %v", item.name, err)
 		c.status = ExitCreate
 
-		return
+		return true
 	}
 
 	c.flush()
 	c.pending = &pendingEntry{verb: verb, header: header}
 
 	if source == nil {
-		return
+		return true
 	}
 
 	if _, err := io.Copy(content, source); err != nil {
 		c.warnf("could not read %s: %v", item.path, err)
 		c.status = ExitInput
 	}
+
+	return true
 }
 
 // header is an entry's: Info-ZIP's unix attributes, stored for a directory
@@ -459,7 +594,7 @@ func (c *creator) flush() {
 				header.UncompressedSize64/2) / header.UncompressedSize64
 		}
 
-		fmt.Fprintf(c.stdout, "%8s: %s (%s %d%%)\n", c.pending.verb, header.Name, method, saved)
+		fmt.Fprintf(c.lines, "%8s: %s (%s %d%%)\n", c.pending.verb, header.Name, method, saved)
 	}
 
 	c.pending = nil

@@ -22,7 +22,7 @@ golangci:
             - mnd # fixture values
         # zip resolves its inputs against the working directory, so its tests
         # change it with t.Chdir, which t.Parallel forbids.
-        - path: internal/zipcmd/run_test\.go
+        - path: internal/zipcmd/.*_test\.go
           linters:
             - paralleltest
         # A test's fixtures are written and read with os: the share mode is
