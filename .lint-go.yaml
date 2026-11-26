@@ -35,8 +35,8 @@ golangci:
         # Errors from this module's own packages carry their context from
         # where they arise; re-wrapping them in every caller is noise.
         ignore-package-globs:
-          - github.com/forkcloser/compress
-          - github.com/forkcloser/compress/*
+          - github.com/forkcloser/go-compress
+          - github.com/forkcloser/go-compress/*
       depguard:
         rules:
           main:

@@ -9,7 +9,7 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
-	"github.com/forkcloser/compress/internal/filecodec"
+	"github.com/forkcloser/go-compress/internal/filecodec"
 )
 
 const helpText = `Usage: zstd [OPTIONS...] [INPUT... | -]

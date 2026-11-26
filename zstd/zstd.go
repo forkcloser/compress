@@ -20,7 +20,7 @@ package zstd
 import (
 	"io"
 
-	"github.com/forkcloser/compress/internal/codec"
+	"github.com/forkcloser/go-compress/internal/codec"
 )
 
 // NewReader returns a reader that decompresses the zstd stream r holds. Its

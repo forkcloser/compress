@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress/internal/zipcmd"
+	"github.com/forkcloser/go-compress/internal/zipcmd"
 )
 
 // TestContractFIFOIsNotAnInput: a FIFO is not opened, which would block

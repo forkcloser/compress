@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress/internal/tarcmd"
+	"github.com/forkcloser/go-compress/internal/tarcmd"
 )
 
 // TestContractArchiveToAFifoWaitsForItsReader: an archive written to a fifo

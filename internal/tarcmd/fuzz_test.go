@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/tarcmd"
+	"github.com/forkcloser/go-compress/internal/tarcmd"
 )
 
 // FuzzExtract: whatever the archive bytes, `tar -xf -` never panics,

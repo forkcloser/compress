@@ -19,8 +19,8 @@ import (
 
 	kgzip "github.com/klauspost/compress/gzip"
 
-	"github.com/forkcloser/compress/internal/filecodec"
-	"github.com/forkcloser/compress/internal/gzipcmd"
+	"github.com/forkcloser/go-compress/internal/filecodec"
+	"github.com/forkcloser/go-compress/internal/gzipcmd"
 )
 
 func run(t *testing.T, name string, stdin []byte, args ...string) (status int, stdout, stderr string) {

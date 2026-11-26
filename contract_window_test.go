@@ -5,8 +5,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/forkcloser/compress"
-	"github.com/forkcloser/compress/zstd"
+	"github.com/forkcloser/go-compress"
+	"github.com/forkcloser/go-compress/zstd"
 )
 
 // windowFrame is a zstd frame of one raw block, "data\n", that declares

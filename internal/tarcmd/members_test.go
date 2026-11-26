@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/tarcmd"
+	"github.com/forkcloser/go-compress/internal/tarcmd"
 )
 
 // memberArchive is the tree archived with its names at the top level.

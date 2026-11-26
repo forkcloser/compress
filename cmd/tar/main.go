@@ -6,7 +6,7 @@ package main
 import (
 	"os"
 
-	"github.com/forkcloser/compress/internal/tarcmd"
+	"github.com/forkcloser/go-compress/internal/tarcmd"
 )
 
 // version is set by the release build (-X main.version=…).

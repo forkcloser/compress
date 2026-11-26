@@ -18,9 +18,9 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
-	"github.com/forkcloser/compress/internal/filecodec"
-	"github.com/forkcloser/compress/internal/reference"
-	"github.com/forkcloser/compress/internal/zstdcmd"
+	"github.com/forkcloser/go-compress/internal/filecodec"
+	"github.com/forkcloser/go-compress/internal/reference"
+	"github.com/forkcloser/go-compress/internal/zstdcmd"
 )
 
 func run(t *testing.T, name string, stdin []byte, args ...string) (status int, stdout, stderr string) {

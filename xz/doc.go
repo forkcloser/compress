@@ -19,5 +19,5 @@
 //
 // Import this package for its side effect:
 //
-//	import _ "github.com/forkcloser/compress/xz"
+//	import _ "github.com/forkcloser/go-compress/xz"
 package xz

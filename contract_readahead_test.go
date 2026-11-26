@@ -7,7 +7,7 @@ import (
 	"testing"
 	"testing/synctest"
 
-	"github.com/forkcloser/compress"
+	"github.com/forkcloser/go-compress"
 )
 
 // stepped gives one byte a Read, each when it is allowed one, and says

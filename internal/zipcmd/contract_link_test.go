@@ -11,8 +11,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/reference"
-	"github.com/forkcloser/compress/internal/zipcmd"
+	"github.com/forkcloser/go-compress/internal/reference"
+	"github.com/forkcloser/go-compress/internal/zipcmd"
 )
 
 // linkOrSkip makes a symbolic link, or skips the test where the account may

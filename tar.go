@@ -26,9 +26,9 @@ import (
 	"os"
 	"path"
 
-	"github.com/forkcloser/compress/internal/codec"
-	"github.com/forkcloser/compress/internal/constants"
-	"github.com/forkcloser/compress/internal/sparse"
+	"github.com/forkcloser/go-compress/internal/codec"
+	"github.com/forkcloser/go-compress/internal/constants"
+	"github.com/forkcloser/go-compress/internal/sparse"
 )
 
 // Tar returns a reader that yields a tar archive of fsys, as archive/tar's

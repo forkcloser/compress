@@ -10,7 +10,7 @@ import (
 
 	kgzip "github.com/klauspost/compress/gzip"
 
-	"github.com/forkcloser/compress/internal/filecodec"
+	"github.com/forkcloser/go-compress/internal/filecodec"
 )
 
 const helpText = `Usage: gzip [OPTION]... [FILE]...

@@ -6,7 +6,7 @@ package main
 import (
 	"os"
 
-	"github.com/forkcloser/compress/internal/gzipcmd"
+	"github.com/forkcloser/go-compress/internal/gzipcmd"
 )
 
 // version is set by the release build (-X main.version=…).

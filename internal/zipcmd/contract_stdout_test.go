@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/reference"
-	"github.com/forkcloser/compress/internal/zipcmd"
+	"github.com/forkcloser/go-compress/internal/reference"
+	"github.com/forkcloser/go-compress/internal/zipcmd"
 )
 
 // TestContractStdoutIsTheArchive: with "-" standard output carries the

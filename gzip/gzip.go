@@ -20,8 +20,8 @@ package gzip
 import (
 	"io"
 
-	"github.com/forkcloser/compress"
-	"github.com/forkcloser/compress/internal/codec"
+	"github.com/forkcloser/go-compress"
+	"github.com/forkcloser/go-compress/internal/codec"
 )
 
 //nolint:gochecknoinits // Registration pattern requires init.

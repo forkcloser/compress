@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress"
-	"github.com/forkcloser/compress/internal/constants"
+	"github.com/forkcloser/go-compress"
+	"github.com/forkcloser/go-compress/internal/constants"
 )
 
 // TestContractCloseUnderAParkedRead: for zstd and xz as for gzip, a Read

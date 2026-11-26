@@ -17,7 +17,7 @@
 
 package compress
 
-import "github.com/forkcloser/compress/internal/codec"
+import "github.com/forkcloser/go-compress/internal/codec"
 
 // The fault classes. Every error this module returns, from this package and
 // from the format packages' readers and writers, wraps one of them, with the

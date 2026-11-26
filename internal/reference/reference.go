@@ -28,8 +28,13 @@ import (
 	"testing"
 )
 
-// ours is what every command of this module prints in its version banner.
-const ours = "(forkcloser/compress)"
+// ours is what every command of this module prints in its version banner,
+// and formerly what those released through v0.3.0 print, which a tool
+// manager still puts on the PATH.
+const (
+	ours     = "(forkcloser/go-compress)"
+	formerly = "(forkcloser/compress)"
+)
 
 // Find returns the first program named name on PATH that runs with
 // versionFlag and does not identify as this module's own, or skips the test
@@ -83,7 +88,7 @@ func probe(tb testing.TB, candidate, versionFlag string) string {
 		return "does not run: " + err.Error()
 	}
 
-	if strings.Contains(string(out), ours) {
+	if strings.Contains(string(out), ours) || strings.Contains(string(out), formerly) {
 		return "this module's own"
 	}
 

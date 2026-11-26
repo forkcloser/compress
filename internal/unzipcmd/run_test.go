@@ -15,7 +15,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress/internal/unzipcmd"
+	"github.com/forkcloser/go-compress/internal/unzipcmd"
 )
 
 func run(t *testing.T, args ...string) (status int, stdout, stderr string) {

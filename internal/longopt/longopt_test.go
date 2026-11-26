@@ -3,7 +3,7 @@ package longopt_test
 import (
 	"testing"
 
-	"github.com/forkcloser/compress/internal/longopt"
+	"github.com/forkcloser/go-compress/internal/longopt"
 )
 
 // TestResolve: a whole name wins over the longer names it begins, one

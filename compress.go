@@ -27,8 +27,8 @@ import (
 
 	"github.com/klauspost/compress/zstd"
 
-	"github.com/forkcloser/compress/internal/codec"
-	"github.com/forkcloser/compress/internal/constants"
+	"github.com/forkcloser/go-compress/internal/codec"
+	"github.com/forkcloser/go-compress/internal/constants"
 )
 
 // inputBufSize amortizes syscalls for every format.

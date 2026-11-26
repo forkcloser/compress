@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress/internal/unzipcmd"
+	"github.com/forkcloser/go-compress/internal/unzipcmd"
 )
 
 // The lines for a pattern that matched nothing, and what a listing of

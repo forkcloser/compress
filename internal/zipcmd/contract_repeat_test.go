@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/zipcmd"
+	"github.com/forkcloser/go-compress/internal/zipcmd"
 )
 
 // TestContractRepeatedInput: an input named more than once, or named beside

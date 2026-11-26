@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress/internal/zipcmd"
+	"github.com/forkcloser/go-compress/internal/zipcmd"
 )
 
 // TestContractUpdateKeepsUnreadable: an update whose input cannot be opened

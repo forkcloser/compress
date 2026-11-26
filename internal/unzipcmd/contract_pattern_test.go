@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress/internal/unzipcmd"
+	"github.com/forkcloser/go-compress/internal/unzipcmd"
 )
 
 // listed is the names a short listing shows, in order, joined by spaces.

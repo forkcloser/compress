@@ -26,7 +26,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/forkcloser/compress"
+	"github.com/forkcloser/go-compress"
 )
 
 // FuzzDecompress: whatever the bytes, Decompress refuses them or hands back a

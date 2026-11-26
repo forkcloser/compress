@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/forkcloser/compress/internal/longopt"
+	"github.com/forkcloser/go-compress/internal/longopt"
 )
 
 // mode is what the invocation does with the archive.

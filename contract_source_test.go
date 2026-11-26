@@ -5,7 +5,7 @@ import (
 	"io"
 	"testing"
 
-	"github.com/forkcloser/compress"
+	"github.com/forkcloser/go-compress"
 )
 
 var errBroken = errors.New("connection reset")

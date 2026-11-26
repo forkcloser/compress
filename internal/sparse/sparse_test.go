@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/sparse"
-	"github.com/forkcloser/compress/internal/tarblocks"
+	"github.com/forkcloser/go-compress/internal/sparse"
+	"github.com/forkcloser/go-compress/internal/tarblocks"
 )
 
 // held is what a file of the tests may take on disk and still be one whose

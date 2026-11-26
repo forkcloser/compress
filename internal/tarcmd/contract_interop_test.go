@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress/internal/tarcmd"
+	"github.com/forkcloser/go-compress/internal/tarcmd"
 )
 
 // entry is what an extracted tree holds at a path: the kind, the

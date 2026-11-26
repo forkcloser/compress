@@ -19,5 +19,5 @@
 //
 // Import this package for its side effect:
 //
-//	import _ "github.com/forkcloser/compress/lz4"
+//	import _ "github.com/forkcloser/go-compress/lz4"
 package lz4

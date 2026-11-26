@@ -22,9 +22,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress/internal/constants"
-	"github.com/forkcloser/compress/internal/reference"
-	"github.com/forkcloser/compress/internal/tarcmd"
+	"github.com/forkcloser/go-compress/internal/constants"
+	"github.com/forkcloser/go-compress/internal/reference"
+	"github.com/forkcloser/go-compress/internal/tarcmd"
 )
 
 // passthroughFilter is the one executable the tests run, and TestMain
