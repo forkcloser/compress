@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/forkcloser/xos"
+	"github.com/forkcloser/go-xos"
 )
 
 // creator writes members into one archive. A member that cannot be archived

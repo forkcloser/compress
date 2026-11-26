@@ -18,7 +18,7 @@ import (
 	kzstd "github.com/klauspost/compress/zstd"
 	plz4 "github.com/pierrec/lz4/v4"
 
-	uxz "github.com/forkcloser/xz/v2"
+	uxz "github.com/forkcloser/go-xz/v2"
 
 	"github.com/forkcloser/go-compress"
 	"github.com/forkcloser/go-compress/bzip2"

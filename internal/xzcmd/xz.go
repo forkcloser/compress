@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"io"
 
-	uxz "github.com/forkcloser/xz/v2"
+	uxz "github.com/forkcloser/go-xz/v2"
 
 	"github.com/forkcloser/go-compress/internal/constants"
 	"github.com/forkcloser/go-compress/internal/filecodec"
