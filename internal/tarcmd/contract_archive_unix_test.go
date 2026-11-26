@@ -36,6 +36,14 @@ func TestContractArchiveThatIsNoRegularFile(t *testing.T) {
 
 	_, stderr := mustRun(t, nil, "-cf", fifo, "-C", dir, "fifo")
 
+	// Its reads wait from here on. The end of the fifo is every writer
+	// gone, and a child another test starts holds the write end from its
+	// fork to its exec: a read that does not wait finds the fifo empty
+	// with a writer left, which is EAGAIN and not the end.
+	if err = blocking(file); err != nil {
+		t.Fatal(err)
+	}
+
 	archive, err := io.ReadAll(file)
 	if err != nil {
 		t.Fatal(err)
@@ -49,4 +57,20 @@ func TestContractArchiveThatIsNoRegularFile(t *testing.T) {
 		filepath.Base(os.DevNull)); stderr != "" {
 		t.Errorf("the null device into itself: %q", stderr)
 	}
+}
+
+// blocking makes the reads of file wait for data or for the end.
+func blocking(file *os.File) error {
+	raw, err := file.SyscallConn()
+	if err != nil {
+		return err
+	}
+
+	var set error
+
+	if err = raw.Control(func(fd uintptr) { set = syscall.SetNonblock(int(fd), false) }); err != nil {
+		return err
+	}
+
+	return set
 }
