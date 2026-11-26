@@ -28,8 +28,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress"
-	"github.com/forkcloser/compress/internal/constants"
+	"github.com/forkcloser/go-compress"
+	"github.com/forkcloser/go-compress/internal/constants"
 )
 
 // scripted is a decoder that hands out data in chunks of at most step, then

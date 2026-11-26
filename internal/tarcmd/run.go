@@ -84,7 +84,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, version strin
 	}
 
 	if opts.version {
-		fmt.Fprintf(stdout, "tar (forkcloser/compress) %s\n", version)
+		fmt.Fprintf(stdout, "tar (forkcloser/go-compress) %s\n", version)
 
 		return ExitOK
 	}

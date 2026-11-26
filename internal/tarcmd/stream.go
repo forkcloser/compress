@@ -12,13 +12,13 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/forkcloser/compress/bzip2"
-	"github.com/forkcloser/compress/gzip"
-	"github.com/forkcloser/compress/internal/codec"
-	"github.com/forkcloser/compress/internal/constants"
-	"github.com/forkcloser/compress/lz4"
-	"github.com/forkcloser/compress/xz"
-	"github.com/forkcloser/compress/zstd"
+	"github.com/forkcloser/go-compress/bzip2"
+	"github.com/forkcloser/go-compress/gzip"
+	"github.com/forkcloser/go-compress/internal/codec"
+	"github.com/forkcloser/go-compress/internal/constants"
+	"github.com/forkcloser/go-compress/lz4"
+	"github.com/forkcloser/go-compress/xz"
+	"github.com/forkcloser/go-compress/zstd"
 )
 
 var (

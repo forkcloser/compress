@@ -19,9 +19,9 @@ import (
 
 	"github.com/forkcloser/xz/v2"
 
-	"github.com/forkcloser/compress/internal/filecodec"
-	"github.com/forkcloser/compress/internal/reference"
-	"github.com/forkcloser/compress/internal/xzcmd"
+	"github.com/forkcloser/go-compress/internal/filecodec"
+	"github.com/forkcloser/go-compress/internal/reference"
+	"github.com/forkcloser/go-compress/internal/xzcmd"
 )
 
 func run(t *testing.T, name string, stdin []byte, args ...string) (status int, stdout, stderr string) {

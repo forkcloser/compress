@@ -20,7 +20,7 @@ package compress
 import (
 	"io"
 
-	"github.com/forkcloser/compress/internal/codec"
+	"github.com/forkcloser/go-compress/internal/codec"
 )
 
 // ReadAhead returns a reader that decodes from decoder on a goroutine of its

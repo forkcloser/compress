@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/tarcmd"
+	"github.com/forkcloser/go-compress/internal/tarcmd"
 )
 
 // longWindow is `tar -cf - hello.txt | zstd --long=30`, by zstd 1.5.7: one

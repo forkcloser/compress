@@ -1,4 +1,4 @@
-module github.com/forkcloser/compress
+module github.com/forkcloser/go-compress
 
 go 1.26.0
 

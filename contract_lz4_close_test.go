@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/compress"
-	"github.com/forkcloser/compress/internal/constants"
-	"github.com/forkcloser/compress/lz4"
+	"github.com/forkcloser/go-compress"
+	"github.com/forkcloser/go-compress/internal/constants"
+	"github.com/forkcloser/go-compress/lz4"
 )
 
 // TestContractLz4ClosedBeforeItsEndLeavesNothing: "the caller must close

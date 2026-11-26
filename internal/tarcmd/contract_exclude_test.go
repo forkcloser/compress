@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/reference"
+	"github.com/forkcloser/go-compress/internal/reference"
 )
 
 // gnuTar is the GNU tar on PATH, the tool --exclude is held to; the test is

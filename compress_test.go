@@ -29,11 +29,11 @@ import (
 
 	"github.com/pierrec/lz4/v4"
 
-	"github.com/forkcloser/compress"
-	_ "github.com/forkcloser/compress/bzip2"
-	_ "github.com/forkcloser/compress/gzip"
-	_ "github.com/forkcloser/compress/lz4"
-	_ "github.com/forkcloser/compress/xz"
+	"github.com/forkcloser/go-compress"
+	_ "github.com/forkcloser/go-compress/bzip2"
+	_ "github.com/forkcloser/go-compress/gzip"
+	_ "github.com/forkcloser/go-compress/lz4"
+	_ "github.com/forkcloser/go-compress/xz"
 )
 
 var errBoom = errors.New("boom")

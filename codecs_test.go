@@ -20,13 +20,13 @@ import (
 
 	uxz "github.com/forkcloser/xz/v2"
 
-	"github.com/forkcloser/compress"
-	"github.com/forkcloser/compress/bzip2"
-	"github.com/forkcloser/compress/gzip"
-	"github.com/forkcloser/compress/internal/constants"
-	"github.com/forkcloser/compress/lz4"
-	"github.com/forkcloser/compress/xz"
-	"github.com/forkcloser/compress/zstd"
+	"github.com/forkcloser/go-compress"
+	"github.com/forkcloser/go-compress/bzip2"
+	"github.com/forkcloser/go-compress/gzip"
+	"github.com/forkcloser/go-compress/internal/constants"
+	"github.com/forkcloser/go-compress/lz4"
+	"github.com/forkcloser/go-compress/xz"
+	"github.com/forkcloser/go-compress/zstd"
 )
 
 // codecPackage is one format package with the library it wraps, the oracle

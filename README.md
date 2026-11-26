@@ -18,9 +18,9 @@ building an archive does:
 
 ```go
 import (
-    "github.com/forkcloser/compress"
-    "github.com/forkcloser/compress/gzip"
-    _ "github.com/forkcloser/compress/xz"
+    "github.com/forkcloser/go-compress"
+    "github.com/forkcloser/go-compress/gzip"
+    _ "github.com/forkcloser/go-compress/xz"
 )
 
 reader, err := compress.Decompress(stream) // the format from its magic bytes
@@ -89,7 +89,7 @@ guessing.
   error, 11 when no member matched; an encrypted member is skipped (5), as
   is one of a compression method it cannot read (81).
 
-xz's compression ratio is forkcloser/xz's, below the C tool's at the same
+xz's compression ratio is forkcloser/go-xz's, below the C tool's at the same
 preset; decoding is at parity.
 
 ## Releasing
@@ -104,8 +104,8 @@ calls on macOS:
 ```yaml
 - type: github_release
   repo_owner: forkcloser
-  repo_name: compress
-  description: tar, xz, gzip, zstd, zip and unzip in pure Go (forkcloser/compress)
+  repo_name: go-compress
+  description: tar, xz, gzip, zstd, zip and unzip in pure Go (forkcloser/go-compress)
   asset: compress_{{trimV .Version}}_{{.OS}}_{{.Arch}}.tar.gz
   format: tar.gz
   files:
@@ -127,7 +127,7 @@ calls on macOS:
         asset: checksums.txt.sigstore.json
       opts:
         - --certificate-identity
-        - https://github.com/forkcloser/compress/.github/workflows/release.yaml@refs/tags/{{.Version}}
+        - https://github.com/forkcloser/go-compress/.github/workflows/release.yaml@refs/tags/{{.Version}}
         - --certificate-oidc-issuer
         - https://token.actions.githubusercontent.com
   supported_envs:
@@ -137,3 +137,8 @@ calls on macOS:
     - windows/amd64
     - windows/arm64
 ```
+
+Releases through v0.3.0 were made as forkcloser/compress, the repository's
+name until then: their module path is `github.com/forkcloser/compress`, and
+the certificate identity that signed their `checksums.txt` reads
+`forkcloser/compress` where the entry above reads `forkcloser/go-compress`.

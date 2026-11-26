@@ -23,11 +23,11 @@
 // and a NewWriter (bzip2 has no writer: Go has none) for a consumer that
 // names its format, as one building an archive does:
 //
-//	import "github.com/forkcloser/compress/gzip"
-//	import "github.com/forkcloser/compress/xz"
-//	import "github.com/forkcloser/compress/lz4"
-//	import "github.com/forkcloser/compress/zstd"
-//	import "github.com/forkcloser/compress/bzip2"
+//	import "github.com/forkcloser/go-compress/gzip"
+//	import "github.com/forkcloser/go-compress/xz"
+//	import "github.com/forkcloser/go-compress/lz4"
+//	import "github.com/forkcloser/go-compress/zstd"
+//	import "github.com/forkcloser/go-compress/bzip2"
 //
 // Every error the module returns wraps one of five classes, compared with
 // errors.Is: ErrUnknownFormat, ErrCorrupt, ErrSource, ErrDestination and

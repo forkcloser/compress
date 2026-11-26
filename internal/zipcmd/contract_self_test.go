@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/zipcmd"
+	"github.com/forkcloser/go-compress/internal/zipcmd"
 )
 
 // TestContractArchiveNotInItself: the archive being updated is never one of

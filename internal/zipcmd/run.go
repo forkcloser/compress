@@ -32,7 +32,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer, version strin
 
 	// -v with no archive is the version, with one it is verbosity.
 	if opts.version || (opts.verbose && opts.archive == "") {
-		fmt.Fprintf(stdout, "zip (forkcloser/compress) %s\n", version)
+		fmt.Fprintf(stdout, "zip (forkcloser/go-compress) %s\n", version)
 
 		return ExitOK
 	}

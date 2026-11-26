@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/forkcloser/compress/internal/constants"
+	"github.com/forkcloser/go-compress/internal/constants"
 )
 
 const (

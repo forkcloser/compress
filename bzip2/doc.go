@@ -19,5 +19,5 @@
 //
 // Import this package for its side effect:
 //
-//	import _ "github.com/forkcloser/compress/bzip2"
+//	import _ "github.com/forkcloser/go-compress/bzip2"
 package bzip2

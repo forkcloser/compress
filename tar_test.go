@@ -29,7 +29,7 @@ import (
 	"testing"
 	"testing/fstest"
 
-	"github.com/forkcloser/compress"
+	"github.com/forkcloser/go-compress"
 )
 
 // tree is the fs.FS the Tar tests archive: a file at the root, a directory

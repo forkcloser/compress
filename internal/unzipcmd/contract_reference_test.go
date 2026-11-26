@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/reference"
+	"github.com/forkcloser/go-compress/internal/reference"
 )
 
 // theirs runs the unzip on PATH that is not this module's own, or skips the

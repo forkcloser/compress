@@ -12,7 +12,7 @@ import (
 
 	"github.com/forkcloser/xos"
 
-	"github.com/forkcloser/compress/internal/longopt"
+	"github.com/forkcloser/go-compress/internal/longopt"
 )
 
 // Exit statuses, the tools'.
@@ -111,7 +111,7 @@ func (f *Format) Run(name string, args []string, stdin io.Reader, stdout, stderr
 	}
 
 	if opts.Version {
-		fmt.Fprintf(stdout, "%s (forkcloser/compress) %s\n", f.Name, version)
+		fmt.Fprintf(stdout, "%s (forkcloser/go-compress) %s\n", f.Name, version)
 
 		return ExitOK
 	}

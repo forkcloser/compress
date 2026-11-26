@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/reference"
-	"github.com/forkcloser/compress/internal/tarcmd"
+	"github.com/forkcloser/go-compress/internal/reference"
+	"github.com/forkcloser/go-compress/internal/tarcmd"
 )
 
 const notDumped = ": archive cannot contain itself; not dumped\n"

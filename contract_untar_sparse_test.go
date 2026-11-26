@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/forkcloser/compress"
-	"github.com/forkcloser/compress/internal/tarblocks"
+	"github.com/forkcloser/go-compress"
+	"github.com/forkcloser/go-compress/internal/tarblocks"
 )
 
 // TestContractUntarLeavesASparseFilesHolesAsHoles: "a sparse file is

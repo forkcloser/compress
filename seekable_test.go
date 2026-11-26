@@ -28,8 +28,8 @@ import (
 
 	"github.com/forkcloser/xz/v2"
 
-	"github.com/forkcloser/compress"
-	"github.com/forkcloser/compress/internal/constants"
+	"github.com/forkcloser/go-compress"
+	"github.com/forkcloser/go-compress/internal/constants"
 )
 
 // Decompress takes the seekable path on its own: an input that is an

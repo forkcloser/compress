@@ -44,8 +44,8 @@ import (
 
 	"github.com/forkcloser/xz/v2"
 
-	"github.com/forkcloser/compress"
-	"github.com/forkcloser/compress/internal/constants"
+	"github.com/forkcloser/go-compress"
+	"github.com/forkcloser/go-compress/internal/constants"
 )
 
 // encoder compresses payload in one format, as that format's own writer does.

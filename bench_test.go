@@ -22,8 +22,8 @@ import (
 	"io"
 	"testing"
 
-	"github.com/forkcloser/compress"
-	"github.com/forkcloser/compress/internal/constants"
+	"github.com/forkcloser/go-compress"
+	"github.com/forkcloser/go-compress/internal/constants"
 )
 
 // The guards: the package exists to stream blob-scale content through these

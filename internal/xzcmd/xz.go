@@ -1,5 +1,5 @@
 // Package xzcmd is the xz command: xz's file-by-file behavior for the
-// options the rig uses, over forkcloser/xz. unxz decompresses, xzcat
+// options the rig uses, over forkcloser/go-xz. unxz decompresses, xzcat
 // decompresses to standard output.
 package xzcmd
 
@@ -9,8 +9,8 @@ import (
 
 	uxz "github.com/forkcloser/xz/v2"
 
-	"github.com/forkcloser/compress/internal/constants"
-	"github.com/forkcloser/compress/internal/filecodec"
+	"github.com/forkcloser/go-compress/internal/constants"
+	"github.com/forkcloser/go-compress/internal/filecodec"
 )
 
 const helpText = `Usage: xz [OPTION]... [FILE]...

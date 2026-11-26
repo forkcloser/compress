@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/forkcloser/compress/internal/constants"
+	"github.com/forkcloser/go-compress/internal/constants"
 )
 
 // Exit statuses, Info-ZIP's.
@@ -48,7 +48,7 @@ func Run(args []string, stdout, stderr io.Writer, version string) int {
 	}
 
 	if opts.help {
-		fmt.Fprintf(stdout, "unzip (forkcloser/compress) %s\n%s", version, helpText)
+		fmt.Fprintf(stdout, "unzip (forkcloser/go-compress) %s\n%s", version, helpText)
 
 		return ExitOK
 	}

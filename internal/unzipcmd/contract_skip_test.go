@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/forkcloser/compress/internal/unzipcmd"
+	"github.com/forkcloser/go-compress/internal/unzipcmd"
 )
 
 // The lines Info-ZIP skips a member with.

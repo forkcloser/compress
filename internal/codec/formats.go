@@ -28,7 +28,7 @@ import (
 
 	uxz "github.com/forkcloser/xz/v2"
 
-	"github.com/forkcloser/compress/internal/constants"
+	"github.com/forkcloser/go-compress/internal/constants"
 )
 
 // The raw constructors: each format's decoder or encoder as its library
