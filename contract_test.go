@@ -42,7 +42,7 @@ import (
 	"github.com/klauspost/compress/zstd"
 	"github.com/pierrec/lz4/v4"
 
-	"github.com/forkcloser/xz/v2"
+	"github.com/forkcloser/go-xz/v2"
 
 	"github.com/forkcloser/go-compress"
 	"github.com/forkcloser/go-compress/internal/constants"

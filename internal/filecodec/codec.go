@@ -10,7 +10,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/forkcloser/xos"
+	"github.com/forkcloser/go-xos"
 
 	"github.com/forkcloser/go-compress/internal/longopt"
 )

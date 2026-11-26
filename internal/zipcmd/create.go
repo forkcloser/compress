@@ -17,7 +17,7 @@ import (
 
 	"github.com/klauspost/compress/flate"
 
-	"github.com/forkcloser/xos"
+	"github.com/forkcloser/go-xos"
 )
 
 const (

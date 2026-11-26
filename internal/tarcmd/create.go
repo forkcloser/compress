@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/forkcloser/xos"
+	"github.com/forkcloser/go-xos"
 )
 
 var errShortRead = errors.New("file shrank while being read")

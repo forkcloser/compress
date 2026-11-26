@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/forkcloser/xz/v2"
+	"github.com/forkcloser/go-xz/v2"
 
 	"github.com/forkcloser/go-compress/internal/filecodec"
 	"github.com/forkcloser/go-compress/internal/reference"

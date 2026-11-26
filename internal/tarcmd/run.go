@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/forkcloser/xos"
+	"github.com/forkcloser/go-xos"
 )
 
 // Exit statuses, GNU tar's.
