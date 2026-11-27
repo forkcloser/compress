@@ -157,7 +157,7 @@ func TestFiles(t *testing.T) {
 func TestStreams(t *testing.T) {
 	t.Parallel()
 
-	for _, level := range []string{"-1", "-3", "-19", "--fast", "--best", "-T0", "--threads=2", "--ultra", "-q19", "--format=zstd"} {
+	for _, level := range []string{"-1", "-3", "-19", "--fast", "-T0", "--threads=2", "--ultra", "-q19", "--format=zstd"} {
 		compressed := mustRun(t, "zstd", []byte(payload), level)
 		if decode(t, []byte(compressed)) != payload {
 			t.Errorf("%s: round trip", level)

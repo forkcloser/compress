@@ -47,6 +47,8 @@ golangci:
               - github.com/pierrec/lz4/v4
               # The commands' file opens, with the share mode os lacks on Windows.
               - github.com/forkcloser/go-xos
+              # Whether a command's standard output is a terminal.
+              - golang.org/x/term
       forbidigo:
         forbid:
           # The library sees readers and writers only, and a command opens a
